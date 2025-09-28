@@ -7,7 +7,7 @@ including Sharpe ratio, maximum drawdown, and other standard measures.
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from scipy import stats
 
 from ..utils.config import BacktestConfig
@@ -101,6 +101,8 @@ class MetricsEngine(LoggerMixin):
             'total_return': total_return,
             'cagr': cagr,
             'annualized_volatility': volatility,
+            'volatility': volatility,  # Add alias for display compatibility
+            'annualized_return': returns.mean() * periods_per_year,  # Add alias
             'sharpe_ratio': sharpe_ratio,
             'sortino_ratio': sortino_ratio,
             'annual_return': returns.mean() * periods_per_year,
@@ -208,37 +210,106 @@ class MetricsEngine(LoggerMixin):
         }
 
     def _calculate_trade_metrics(self, trades: pd.DataFrame) -> Dict[str, float]:
-        """Calculate trade-level metrics"""
+        """
+        Calculate trade-level metrics including PnL analysis
+        """
         if trades.empty:
-            return {}
-
-        # Trade PnL calculation would need to be implemented based on
-        # how trades are structured. For now, basic stats:
+            return {
+                'total_trades': 0,
+                'win_rate': 0.0,
+                'profit_factor': 0.0,
+                'avg_trade_pnl': 0.0,
+                'avg_trade_pnl_pct': 0.0
+            }
 
         num_trades = len(trades)
 
-        # If we have fill prices and quantities, we can calculate basic stats
-        if 'filled_qty' in trades.columns and 'fill_price' in trades.columns:
-            trade_values = trades['filled_qty'] * trades['fill_price']
+        # Calculate basic trade statistics
+        basic_stats = {
+            'total_trades': num_trades,
+            'avg_commission': trades['commission'].mean() if 'commission' in trades.columns else 0,
+            'total_commission': trades['commission'].sum() if 'commission' in trades.columns else 0
+        }
 
-            avg_trade_size = trade_values.abs().mean()
-            largest_trade = trade_values.abs().max()
+        # Calculate trade PnL if we have sufficient data
+        if 'side' in trades.columns and 'quantity' in trades.columns and 'price' in trades.columns:
+            # Group trades by symbol to calculate round-trip PnL
+            pnl_trades = self._calculate_round_trip_pnl(trades)
 
-            # Buy/sell breakdown
-            buys = trades[trades['filled_qty'] > 0]
-            sells = trades[trades['filled_qty'] < 0]
+            if pnl_trades:
+                winning_trades = [pnl for pnl in pnl_trades if pnl > 0]
+                losing_trades = [pnl for pnl in pnl_trades if pnl < 0]
 
-            return {
-                'total_trades': num_trades,
-                'buy_trades': len(buys),
-                'sell_trades': len(sells),
-                'avg_trade_size': avg_trade_size,
-                'largest_trade': largest_trade,
-                'avg_commission': trades['commission'].mean() if 'commission' in trades.columns else 0,
-                'total_commission': trades['commission'].sum() if 'commission' in trades.columns else 0
-            }
+                # Win rate
+                win_rate = len(winning_trades) / len(pnl_trades) if pnl_trades else 0.0
 
-        return {'total_trades': num_trades}
+                # Profit factor (gross profit / gross loss)
+                gross_profit = sum(winning_trades) if winning_trades else 0
+                gross_loss = abs(sum(losing_trades)) if losing_trades else 0
+                profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0.0
+
+                # Average trade PnL
+                avg_trade_pnl = sum(pnl_trades) / len(pnl_trades) if pnl_trades else 0.0
+
+                # Average trade PnL percentage (approximate)
+                avg_trade_value = trades['value'].mean() if 'value' in trades.columns else 1.0
+                avg_trade_pnl_pct = (avg_trade_pnl / avg_trade_value) if avg_trade_value > 0 else 0.0
+
+                basic_stats.update({
+                    'win_rate': win_rate,
+                    'profit_factor': profit_factor,
+                    'avg_trade_pnl': avg_trade_pnl,
+                    'avg_trade_pnl_pct': avg_trade_pnl_pct,
+                    'num_winning_trades': len(winning_trades),
+                    'num_losing_trades': len(losing_trades),
+                    'gross_profit': gross_profit,
+                    'gross_loss': gross_loss
+                })
+            else:
+                # No complete round trips found
+                basic_stats.update({
+                    'win_rate': 0.0,
+                    'profit_factor': 0.0,
+                    'avg_trade_pnl': 0.0,
+                    'avg_trade_pnl_pct': 0.0
+                })
+
+        return basic_stats
+
+    def _calculate_round_trip_pnl(self, trades: pd.DataFrame) -> List[float]:
+        """
+        Calculate round-trip PnL from individual fills
+        Simple FIFO matching for buy/sell pairs
+        """
+        pnl_list = []
+
+        # Group by symbol
+        for symbol in trades['symbol'].unique():
+            symbol_trades = trades[trades['symbol'] == symbol].copy()
+            symbol_trades = symbol_trades.sort_index()  # Sort by timestamp
+
+            position = 0.0
+            cost_basis = 0.0
+
+            for _, trade in symbol_trades.iterrows():
+                if trade['side'] == 'buy':
+                    # Adding to position
+                    new_cost = position * cost_basis + trade['quantity'] * trade['price']
+                    position += trade['quantity']
+                    cost_basis = new_cost / position if position != 0 else 0
+
+                elif trade['side'] == 'sell':
+                    # Reducing position
+                    if position > 0:
+                        # Calculate PnL for the sold portion
+                        sold_qty = min(trade['quantity'], position)
+                        pnl = sold_qty * (trade['price'] - cost_basis)
+                        pnl_list.append(pnl)
+
+                        # Update position
+                        position -= sold_qty
+
+        return pnl_list
 
     def _get_annualization_factor(self, date_index: pd.DatetimeIndex) -> float:
         """Determine annualization factor based on data frequency"""
