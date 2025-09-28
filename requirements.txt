@@ -1,0 +1,35 @@
+# Core dependencies for BackT
+pandas>=1.3.0
+numpy>=1.20.0
+scipy>=1.7.0
+matplotlib>=3.4.0
+seaborn>=0.11.0
+yfinance>=0.1.70
+
+# Optional dependencies (install as needed)
+# For development:
+# pytest>=6.0
+# pytest-cov>=2.0
+# black>=21.0
+# flake8>=3.9
+# mypy>=0.910
+# pre-commit>=2.15
+
+# For Jupyter notebooks:
+# jupyter>=1.0
+# ipykernel>=6.0
+# notebook>=6.4
+
+# For web interface:
+# streamlit>=1.0
+# plotly>=5.0
+
+# For advanced features:
+# numba>=0.56
+# scikit-learn>=1.0
+# statsmodels>=0.13
+
+# For additional data sources:
+# quandl>=3.7
+# alpha-vantage>=2.3
+# pandas-datareader>=0.10
