@@ -30,6 +30,7 @@ Usage:
 from backt.engine.backtester import Backtester
 from backt.utils.config import BacktestConfig
 from backt.data.loaders import YahooDataLoader, CSVDataLoader
+from backt.data.mock_data import MockDataLoader
 from backt.execution.mock_execution import MockExecutionEngine
 from backt.portfolio.portfolio_manager import PortfolioManager
 from backt.risk.metrics import MetricsEngine
@@ -43,6 +44,7 @@ __all__ = [
     "BacktestConfig",
     "YahooDataLoader",
     "CSVDataLoader",
+    "MockDataLoader",
     "MockExecutionEngine",
     "PortfolioManager",
     "MetricsEngine",

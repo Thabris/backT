@@ -182,7 +182,7 @@ def run_universe_backtest(
         start_date=start_date,
         end_date=end_date,
         initial_capital=initial_capital,
-        data_frequency='1M',            # Monthly rebalancing
+        data_frequency='1D',            # Daily data, monthly rebalancing in strategy
         execution=execution_config,
         verbose=True
     )
@@ -205,15 +205,15 @@ def run_universe_backtest(
     try:
         result = backtester.run(
             strategy=diversified_momentum_strategy,
-            symbols=universe,
+            universe=universe,
             strategy_params=default_params
         )
 
-        print("✅ Backtest completed successfully!\n")
+        print("[SUCCESS] Backtest completed successfully!\n")
         return result
 
     except Exception as e:
-        print(f"❌ Backtest failed: {str(e)}")
+        print(f"[ERROR] Backtest failed: {str(e)}")
         raise
 
 
@@ -232,14 +232,14 @@ def display_comprehensive_metrics(result):
     print(f"{'='*60}")
 
     # Return Metrics
-    print(f"\n📈 RETURN METRICS")
+    print(f"\n[RETURN METRICS]")
     print(f"{'-'*30}")
     print(f"Total Return:           {metrics.get('total_return', 0):.2%}")
     print(f"Annualized Return:      {metrics.get('annualized_return', 0):.2%}")
     print(f"CAGR:                   {metrics.get('cagr', 0):.2%}")
 
     # Risk Metrics
-    print(f"\n⚠️  RISK METRICS")
+    print(f"\n[RISK METRICS]")
     print(f"{'-'*30}")
     print(f"Volatility (Annual):    {metrics.get('volatility', 0):.2%}")
     print(f"Sharpe Ratio:           {metrics.get('sharpe_ratio', 0):.3f}")
@@ -247,14 +247,14 @@ def display_comprehensive_metrics(result):
     print(f"Calmar Ratio:           {metrics.get('calmar_ratio', 0):.3f}")
 
     # Drawdown Analysis
-    print(f"\n📉 DRAWDOWN ANALYSIS")
+    print(f"\n[DRAWDOWN ANALYSIS]")
     print(f"{'-'*30}")
     print(f"Maximum Drawdown:       {metrics.get('max_drawdown', 0):.2%}")
     print(f"Avg Drawdown:           {metrics.get('avg_drawdown', 0):.2%}")
     print(f"Max DD Duration:        {metrics.get('max_drawdown_duration', 0)} periods")
 
     # Trade Statistics
-    print(f"\n📊 TRADE STATISTICS")
+    print(f"\n[TRADE STATISTICS]")
     print(f"{'-'*30}")
     print(f"Total Trades:           {metrics.get('total_trades', 0)}")
     print(f"Win Rate:               {metrics.get('win_rate', 0):.1%}")
@@ -262,7 +262,7 @@ def display_comprehensive_metrics(result):
     print(f"Average Trade:          {metrics.get('avg_trade_return', 0):.2%}")
 
     # Portfolio Statistics
-    print(f"\n💼 PORTFOLIO STATISTICS")
+    print(f"\n[PORTFOLIO STATISTICS]")
     print(f"{'-'*30}")
     print(f"Final Portfolio Value:  ${result.portfolio_value:.0f}")
     print(f"Best Month:             {metrics.get('best_month', 0):.2%}")
@@ -270,7 +270,7 @@ def display_comprehensive_metrics(result):
     print(f"% Positive Months:      {metrics.get('positive_months_pct', 0):.1%}")
 
     # Risk-Adjusted Metrics
-    print(f"\n🎯 RISK-ADJUSTED METRICS")
+    print(f"\n[RISK-ADJUSTED METRICS]")
     print(f"{'-'*30}")
     print(f"Information Ratio:      {metrics.get('information_ratio', 0):.3f}")
     print(f"VaR (95%):              {metrics.get('var_95', 0):.2%}")
@@ -367,7 +367,7 @@ def main():
 
         # Create summary table
         summary_table = create_summary_table(result)
-        print(f"\n📋 SUMMARY TABLE")
+        print(f"\n[SUMMARY TABLE]")
         print(f"{'-'*30}")
         print(summary_table.to_string(index=False))
 
@@ -382,15 +382,15 @@ def main():
 
             output_file = f"backtest_results_{args.start_date}_{args.end_date}.csv"
             equity_df.to_csv(output_file, index=False)
-            print(f"\n💾 Results saved to: {output_file}")
+            print(f"\n[SAVED] Results saved to: {output_file}")
 
         except Exception as e:
-            print(f"\n⚠️  Could not save results: {e}")
+            print(f"\n[WARNING] Could not save results: {e}")
 
         return result
 
     except Exception as e:
-        print(f"\n❌ Error running backtest: {e}")
+        print(f"\n[ERROR] Error running backtest: {e}")
         return None
 
 

@@ -13,6 +13,7 @@ import pandas as pd
 from ..utils.types import StrategyFunction, BacktestResult, TimeSeriesData
 from ..utils.config import BacktestConfig
 from ..data.loaders import DataLoader, YahooDataLoader
+from ..data.mock_data import MockDataLoader
 from ..execution.mock_execution import MockExecutionEngine
 from ..portfolio.portfolio_manager import PortfolioManager
 from ..risk.metrics import MetricsEngine
@@ -50,7 +51,15 @@ class Backtester(LoggerMixin):
             setup_logging("WARNING")
 
         # Initialize components
-        self.data_loader = data_loader or YahooDataLoader()
+        if config.use_mock_data:
+            self.data_loader = data_loader or MockDataLoader(
+                scenario=config.mock_scenario,
+                seed=config.mock_seed
+            )
+            self.logger.info(f"Using mock data loader with scenario: {config.mock_scenario}")
+        else:
+            self.data_loader = data_loader or YahooDataLoader()
+            self.logger.info("Using Yahoo Finance data loader")
         self.execution_engine = execution_engine or MockExecutionEngine(config.execution)
         self.portfolio = portfolio_manager or PortfolioManager(config)
         self.metrics_engine = metrics_engine or MetricsEngine(config)

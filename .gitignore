@@ -81,8 +81,8 @@ Thumbs.db
 # Claude Code settings (keep local settings private)
 .claude/settings.local.json
 
-# Data files (optional - you might want to track some data)
-data/
+# Data files (but NOT source code data modules)
+/data/
 *.csv
 *.h5
 *.hdf5

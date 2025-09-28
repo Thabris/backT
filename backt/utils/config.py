@@ -67,6 +67,11 @@ class BacktestConfig:
     save_equity_curve: bool = True
     output_dir: Optional[str] = None
 
+    # Mock data settings
+    use_mock_data: bool = False  # Use synthetic data instead of real market data
+    mock_scenario: str = "normal"  # Mock market scenario: 'normal', 'bull', 'bear', 'volatile'
+    mock_seed: Optional[int] = 42  # Random seed for reproducible mock data
+
     # Advanced settings
     random_seed: Optional[int] = None
     verbose: bool = True
