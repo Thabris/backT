@@ -558,33 +558,69 @@ class MetricsEngine(LoggerMixin):
         per_symbol_equity_curves: Dict[str, pd.DataFrame]
     ) -> pd.DataFrame:
         """
-        Calculate correlation matrix of returns between symbols
+        Calculate correlation matrix of percentage returns between symbols
+
+        Uses percentage changes in total_pnl to normalize for position size differences.
+        Correlation is calculated using Pearson correlation coefficient on the
+        percentage return time series.
 
         Args:
             per_symbol_equity_curves: Dictionary of symbol -> equity curve DataFrame
 
         Returns:
-            Correlation matrix as DataFrame
+            Correlation matrix as DataFrame with Pearson correlation coefficients
         """
         returns_dict = {}
 
-        # Extract returns for each symbol
+        # Extract percentage returns for each symbol
         for symbol, equity_curve in per_symbol_equity_curves.items():
             if equity_curve.empty:
                 continue
 
-            # Use total_pnl changes as returns proxy
+            # Use total_pnl percentage changes as returns
             if 'total_pnl' in equity_curve.columns:
-                pnl_changes = equity_curve['total_pnl'].diff().dropna()
-                returns_dict[symbol] = pnl_changes
+                pnl_series = equity_curve['total_pnl']
+
+                # Calculate percentage change in PnL
+                # pct_change() = (pnl[t] - pnl[t-1]) / pnl[t-1]
+                # We need to handle the case where previous PnL is 0 or near 0
+
+                # Shift to get previous values
+                pnl_prev = pnl_series.shift(1)
+
+                # Calculate absolute change
+                pnl_change = pnl_series - pnl_prev
+
+                # Calculate percentage change with safety for division by zero
+                # Use absolute value of previous PnL to avoid sign issues
+                pnl_prev_abs = pnl_prev.abs()
+
+                # Where previous PnL is very small (< $1), use absolute change instead
+                # This prevents huge percentage spikes when crossing zero
+                min_base = 100.0  # Minimum base for percentage calculation
+                pnl_base = pnl_prev_abs.where(pnl_prev_abs >= min_base, min_base)
+
+                # Calculate percentage returns
+                pct_returns = (pnl_change / pnl_base) * 100  # In percentage points
+
+                # Drop NaN values (first row and any other invalid values)
+                pct_returns = pct_returns.dropna()
+
+                # Only include if we have valid returns
+                if len(pct_returns) > 0:
+                    returns_dict[symbol] = pct_returns
 
         if not returns_dict:
             return pd.DataFrame()
 
-        # Create returns DataFrame
+        # Create returns DataFrame (aligned by timestamp)
         returns_df = pd.DataFrame(returns_dict)
 
-        # Calculate correlation matrix
-        correlation_matrix = returns_df.corr()
+        # Drop any rows with NaN values to ensure clean correlation calculation
+        returns_df = returns_df.dropna()
+
+        # Calculate Pearson correlation matrix
+        # Pearson correlation: corr(X,Y) = cov(X,Y) / (std(X) * std(Y))
+        correlation_matrix = returns_df.corr(method='pearson')
 
         return correlation_matrix
