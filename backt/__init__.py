@@ -35,6 +35,7 @@ from backt.execution.mock_execution import MockExecutionEngine
 from backt.portfolio.portfolio_manager import PortfolioManager
 from backt.risk.metrics import MetricsEngine
 from backt.utils.types import Position, Fill, BacktestResult
+from backt.optimization import StrategyOptimizer, OptimizationResult
 
 __version__ = "0.1.0"
 __author__ = "BackT Development Team"
@@ -50,5 +51,7 @@ __all__ = [
     "MetricsEngine",
     "Position",
     "Fill",
-    "BacktestResult"
+    "BacktestResult",
+    "StrategyOptimizer",
+    "OptimizationResult"
 ]

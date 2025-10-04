@@ -81,7 +81,10 @@ class MetricsEngine(LoggerMixin):
 
         # CAGR (Compound Annual Growth Rate)
         years = len(equity) / periods_per_year
-        cagr = (final_equity / initial_equity) ** (1 / years) - 1 if years > 0 else 0
+        if years > 0 and initial_equity > 0 and final_equity > 0:
+            cagr = (final_equity / initial_equity) ** (1 / years) - 1
+        else:
+            cagr = 0.0
 
         # Volatility
         volatility = returns.std() * np.sqrt(periods_per_year)
@@ -192,7 +195,10 @@ class MetricsEngine(LoggerMixin):
 
         # Calmar ratio (CAGR / Max Drawdown)
         years = len(equity) / self._get_annualization_factor(equity_curve.index)
-        cagr = (equity.iloc[-1] / equity.iloc[0]) ** (1 / years) - 1 if years > 0 else 0
+        if years > 0 and equity.iloc[0] > 0 and equity.iloc[-1] > 0:
+            cagr = (equity.iloc[-1] / equity.iloc[0]) ** (1 / years) - 1
+        else:
+            cagr = 0.0
         calmar_ratio = cagr / abs(max_drawdown) if max_drawdown < 0 else np.inf
 
         # Recovery factor
