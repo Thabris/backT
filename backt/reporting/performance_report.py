@@ -487,7 +487,7 @@ class PerformanceReport(LoggerMixin):
             ax.set_title('Monthly Returns', fontweight='bold')
             return
 
-        monthly_returns = returns.resample('M').apply(lambda x: (1 + x).prod() - 1)
+        monthly_returns = returns.resample('ME').apply(lambda x: (1 + x).prod() - 1)
         monthly_returns_pct = monthly_returns * 100
 
         # Create heatmap if we have enough data (>12 months)
