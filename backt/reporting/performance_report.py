@@ -163,10 +163,34 @@ class PerformanceReport(LoggerMixin):
 
             if num_years > 0:
                 annualized_return = (1 + total_return) ** (1 / num_years) - 1
+                cagr = annualized_return  # CAGR same as annualized return for buy & hold
             else:
                 annualized_return = 0
+                cagr = 0
 
             volatility = benchmark_returns.std() * np.sqrt(252)  # Annualized
+            annualized_volatility = volatility
+
+            # Calculate Sharpe ratio (assuming 0% risk-free rate)
+            if volatility > 0:
+                sharpe_ratio = annualized_return / volatility
+            else:
+                sharpe_ratio = 0
+
+            # Calculate Sortino ratio
+            negative_returns = benchmark_returns[benchmark_returns < 0]
+            if len(negative_returns) > 0:
+                downside_std = negative_returns.std() * np.sqrt(252)
+                if downside_std > 0:
+                    sortino_ratio = annualized_return / downside_std
+                else:
+                    sortino_ratio = 0
+            else:
+                sortino_ratio = 0
+
+            # Best and worst days
+            best_day = benchmark_returns.max() if len(benchmark_returns) > 0 else 0
+            worst_day = benchmark_returns.min() if len(benchmark_returns) > 0 else 0
 
             # Calculate buy-and-hold value
             bh_final_value = self.initial_capital * (1 + total_return)
@@ -182,8 +206,15 @@ class PerformanceReport(LoggerMixin):
 
             self.benchmark_metrics = {
                 'total_return': total_return,
+                'cagr': cagr,
                 'annualized_return': annualized_return,
+                'annual_return': annualized_return,
                 'volatility': volatility,
+                'annualized_volatility': annualized_volatility,
+                'sharpe_ratio': sharpe_ratio,
+                'sortino_ratio': sortino_ratio,
+                'best_day': best_day,
+                'worst_day': worst_day,
                 'final_value': bh_final_value,
                 'profit_loss': bh_profit
             }
@@ -451,7 +482,8 @@ class PerformanceReport(LoggerMixin):
     def get_metrics_dataframe(
         self,
         transpose: bool = True,
-        include_calculated: bool = True
+        include_calculated: bool = True,
+        include_benchmark: bool = True
     ) -> pd.DataFrame:
         """
         Get metrics as DataFrame
@@ -459,18 +491,73 @@ class PerformanceReport(LoggerMixin):
         Args:
             transpose: If True, metrics are rows; if False, metrics are columns
             include_calculated: Include calculated fields
+            include_benchmark: Include benchmark column if available
 
         Returns:
-            DataFrame of metrics
+            DataFrame of metrics (with benchmark column if available)
         """
-        metrics = self.get_metrics_dict(include_calculated=include_calculated)
-        df = pd.DataFrame([metrics])
+        metrics = self.get_metrics_dict(include_calculated=include_calculated, include_benchmark=False)
 
         if transpose:
-            df = df.T
-            df.columns = ['Value']
+            # Create strategy column
+            df = pd.DataFrame(metrics, index=['Strategy']).T
+            df.columns = ['Strategy']
 
-        return df
+            # Add benchmark column if available
+            if include_benchmark and self.benchmark_metrics:
+                # Create benchmark data with matching metrics
+                benchmark_data = {}
+
+                # Map strategy metrics to benchmark equivalents
+                metric_mapping = {
+                    'total_return': 'total_return',
+                    'cagr': 'cagr',
+                    'annualized_return': 'annualized_return',
+                    'annual_return': 'annual_return',
+                    'volatility': 'volatility',
+                    'annualized_volatility': 'annualized_volatility',
+                    'sharpe_ratio': 'sharpe_ratio',
+                    'sortino_ratio': 'sortino_ratio',
+                    'best_day': 'best_day',
+                    'worst_day': 'worst_day',
+                    'final_value': 'final_value',
+                    'profit_loss': 'profit_loss'
+                }
+
+                # Populate benchmark column with available data
+                for idx in df.index:
+                    if idx in metric_mapping:
+                        bench_key = metric_mapping[idx]
+                        if bench_key in self.benchmark_metrics:
+                            benchmark_data[idx] = self.benchmark_metrics[bench_key]
+                        else:
+                            benchmark_data[idx] = None
+                    elif idx == 'initial_capital':
+                        benchmark_data[idx] = self.initial_capital
+                    else:
+                        benchmark_data[idx] = None
+
+                # Add benchmark column
+                df[self.config.benchmark_name] = df.index.map(lambda x: benchmark_data.get(x, None))
+
+            return df
+        else:
+            # Non-transposed format
+            df = pd.DataFrame([metrics])
+
+            if include_benchmark and self.benchmark_metrics:
+                # Add benchmark metrics as separate columns with prefix
+                bench_cols = {}
+                bench_cols[f'benchmark_total_return'] = self.benchmark_metrics['total_return']
+                bench_cols[f'benchmark_annualized_return'] = self.benchmark_metrics['annualized_return']
+                bench_cols[f'benchmark_volatility'] = self.benchmark_metrics['volatility']
+                bench_cols[f'benchmark_final_value'] = self.benchmark_metrics['final_value']
+                bench_cols[f'benchmark_profit_loss'] = self.benchmark_metrics['profit_loss']
+
+                for col, val in bench_cols.items():
+                    df[col] = val
+
+            return df
 
     def generate_charts(
         self,

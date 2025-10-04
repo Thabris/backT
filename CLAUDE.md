@@ -141,3 +141,12 @@ Multiple data sources supported through a common interface:
 - Core dependencies: pandas, numpy, scipy, matplotlib, yfinance
 - Optional: streamlit (web), jupyter (notebooks), numba (performance)
 - Development tools: pytest, black, flake8, mypy, pre-commit
+
+## Git Workflow
+
+**IMPORTANT**: Always ask for explicit permission before running `git commit` or `git push` commands.
+
+- Never commit or push changes without user approval
+- When changes are ready, summarize what will be committed and ask: "Would you like me to commit and push these changes?"
+- Only proceed with git operations after receiving explicit confirmation
+- Exception: `git status`, `git diff`, and other read-only git commands can be used without asking
