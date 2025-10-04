@@ -437,3 +437,154 @@ class MetricsEngine(LoggerMixin):
             'information_ratio': information_ratio,
             'tracking_error': tracking_error
         }
+
+    def calculate_per_symbol_metrics(
+        self,
+        per_symbol_equity_curves: Dict[str, pd.DataFrame],
+        trades: Optional[pd.DataFrame] = None
+    ) -> Dict[str, Dict[str, float]]:
+        """
+        Calculate performance metrics for each symbol individually
+
+        Args:
+            per_symbol_equity_curves: Dictionary of symbol -> equity curve DataFrame
+            trades: DataFrame with individual trades (optional)
+
+        Returns:
+            Dictionary of symbol -> metrics dictionary
+        """
+        per_symbol_metrics = {}
+
+        for symbol, equity_curve in per_symbol_equity_curves.items():
+            if equity_curve.empty:
+                continue
+
+            # Filter trades for this symbol if available
+            symbol_trades = None
+            if trades is not None and not trades.empty and 'symbol' in trades.columns:
+                symbol_trades = trades[trades['symbol'] == symbol]
+
+            # Calculate metrics using total_pnl as the equity measure
+            metrics = self._calculate_symbol_specific_metrics(equity_curve, symbol_trades)
+            per_symbol_metrics[symbol] = metrics
+
+        return per_symbol_metrics
+
+    def _calculate_symbol_specific_metrics(
+        self,
+        equity_curve: pd.DataFrame,
+        trades: Optional[pd.DataFrame] = None
+    ) -> Dict[str, float]:
+        """Calculate metrics for a single symbol's equity curve"""
+        if equity_curve.empty:
+            return {}
+
+        metrics = {}
+
+        # Use total_pnl as the primary metric for symbol performance
+        if 'total_pnl' in equity_curve.columns:
+            pnl_series = equity_curve['total_pnl']
+
+            # Total PnL
+            initial_pnl = pnl_series.iloc[0] if len(pnl_series) > 0 else 0
+            final_pnl = pnl_series.iloc[-1] if len(pnl_series) > 0 else 0
+            total_pnl = final_pnl - initial_pnl
+
+            # Calculate returns from PnL changes
+            pnl_changes = pnl_series.diff().dropna()
+
+            if not pnl_changes.empty and len(pnl_changes) > 1:
+                periods_per_year = self._get_annualization_factor(equity_curve.index)
+
+                # Average PnL per period
+                avg_pnl_per_period = pnl_changes.mean()
+
+                # Volatility of PnL
+                pnl_volatility = pnl_changes.std()
+
+                # Annualized volatility
+                annualized_volatility = pnl_volatility * np.sqrt(periods_per_year)
+
+                # Sharpe-like ratio for PnL
+                sharpe_ratio = (avg_pnl_per_period / pnl_volatility * np.sqrt(periods_per_year)) \
+                    if pnl_volatility > 0 else 0
+
+                # Sortino ratio (downside deviation)
+                downside_pnl = pnl_changes[pnl_changes < 0]
+                downside_deviation = downside_pnl.std()
+                sortino_ratio = (avg_pnl_per_period / downside_deviation * np.sqrt(periods_per_year)) \
+                    if downside_deviation > 0 else 0
+
+                # Best and worst days
+                best_day = pnl_changes.max()
+                worst_day = pnl_changes.min()
+
+                # Win rate (percentage of positive PnL days)
+                positive_days = (pnl_changes > 0).sum() / len(pnl_changes)
+
+                metrics.update({
+                    'total_pnl': total_pnl,
+                    'final_pnl': final_pnl,
+                    'avg_pnl_per_period': avg_pnl_per_period,
+                    'pnl_volatility': pnl_volatility,
+                    'annualized_volatility': annualized_volatility,
+                    'sharpe_ratio': sharpe_ratio,
+                    'sortino_ratio': sortino_ratio,
+                    'best_day': best_day,
+                    'worst_day': worst_day,
+                    'positive_days': positive_days
+                })
+
+                # Drawdown metrics on cumulative PnL
+                running_max = pnl_series.expanding().max()
+                drawdown = pnl_series - running_max
+                max_drawdown = drawdown.min()
+
+                metrics.update({
+                    'max_drawdown': max_drawdown,
+                })
+
+        # Add trade-level metrics if available
+        if trades is not None and not trades.empty:
+            trade_metrics = self._calculate_trade_metrics(trades)
+            metrics.update({
+                f'trades_{k}': v for k, v in trade_metrics.items()
+            })
+
+        return metrics
+
+    def calculate_returns_correlation_matrix(
+        self,
+        per_symbol_equity_curves: Dict[str, pd.DataFrame]
+    ) -> pd.DataFrame:
+        """
+        Calculate correlation matrix of returns between symbols
+
+        Args:
+            per_symbol_equity_curves: Dictionary of symbol -> equity curve DataFrame
+
+        Returns:
+            Correlation matrix as DataFrame
+        """
+        returns_dict = {}
+
+        # Extract returns for each symbol
+        for symbol, equity_curve in per_symbol_equity_curves.items():
+            if equity_curve.empty:
+                continue
+
+            # Use total_pnl changes as returns proxy
+            if 'total_pnl' in equity_curve.columns:
+                pnl_changes = equity_curve['total_pnl'].diff().dropna()
+                returns_dict[symbol] = pnl_changes
+
+        if not returns_dict:
+            return pd.DataFrame()
+
+        # Create returns DataFrame
+        returns_df = pd.DataFrame(returns_dict)
+
+        # Calculate correlation matrix
+        correlation_matrix = returns_df.corr()
+
+        return correlation_matrix

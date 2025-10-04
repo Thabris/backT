@@ -23,6 +23,7 @@ class PortfolioManager(LoggerMixin):
         self.cash = config.initial_capital
         self.positions: Dict[str, Position] = {}
         self.equity_history: List[Dict] = []
+        self.per_symbol_equity_history: Dict[str, List[Dict]] = {}  # Track per-symbol equity
 
     def process_fill(self, fill: Fill, current_prices: Dict[str, float]) -> None:
         """Process a trade fill and update portfolio state"""
@@ -132,7 +133,42 @@ class PortfolioManager(LoggerMixin):
         }
 
         self.equity_history.append(snapshot)
+
+        # Track per-symbol equity
+        self._record_per_symbol_equity(current_prices, timestamp)
+
         return snapshot
+
+    def _record_per_symbol_equity(self, current_prices: Dict[str, float], timestamp: pd.Timestamp) -> None:
+        """Record equity snapshot for each symbol"""
+        for symbol, position in self.positions.items():
+            if symbol not in self.per_symbol_equity_history:
+                self.per_symbol_equity_history[symbol] = []
+
+            # Calculate position value and equity contribution
+            if position.qty != 0 and symbol in current_prices:
+                position_value = current_prices[symbol] * position.qty
+                unrealized_pnl = position.unrealized_pnl
+                realized_pnl = position.realized_pnl
+                total_pnl = unrealized_pnl + realized_pnl
+            else:
+                position_value = 0.0
+                unrealized_pnl = 0.0
+                realized_pnl = position.realized_pnl
+                total_pnl = realized_pnl
+
+            symbol_snapshot = {
+                'timestamp': timestamp,
+                'position_value': position_value,
+                'qty': position.qty,
+                'price': current_prices.get(symbol, position.avg_price),
+                'avg_price': position.avg_price,
+                'unrealized_pnl': unrealized_pnl,
+                'realized_pnl': realized_pnl,
+                'total_pnl': total_pnl
+            }
+
+            self.per_symbol_equity_history[symbol].append(symbol_snapshot)
 
     def get_position_summary(self) -> Dict[str, Dict]:
         """Get summary of all positions"""
@@ -198,11 +234,24 @@ class PortfolioManager(LoggerMixin):
         df.set_index('timestamp', inplace=True)
         return df
 
+    def get_per_symbol_equity_curves(self) -> Dict[str, pd.DataFrame]:
+        """Get per-symbol equity curves as DataFrames"""
+        symbol_curves = {}
+
+        for symbol, history in self.per_symbol_equity_history.items():
+            if history:
+                df = pd.DataFrame(history)
+                df.set_index('timestamp', inplace=True)
+                symbol_curves[symbol] = df
+
+        return symbol_curves
+
     def reset(self) -> None:
         """Reset portfolio to initial state"""
         self.cash = self.initial_capital
         self.positions.clear()
         self.equity_history.clear()
+        self.per_symbol_equity_history.clear()
 
     def get_leverage(self, current_prices: Dict[str, float]) -> float:
         """Calculate current leverage"""

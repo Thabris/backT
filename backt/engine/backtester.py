@@ -130,6 +130,23 @@ class Backtester(LoggerMixin):
                     equity_curve, trades_df
                 )
 
+            # Get per-symbol data
+            per_symbol_equity_curves = self.portfolio.get_per_symbol_equity_curves()
+            per_symbol_metrics = None
+            returns_correlation_matrix = None
+
+            if per_symbol_equity_curves:
+                # Calculate per-symbol metrics
+                per_symbol_metrics = self.metrics_engine.calculate_per_symbol_metrics(
+                    per_symbol_equity_curves, trades_df
+                )
+
+                # Calculate correlation matrix
+                if len(per_symbol_equity_curves) > 1:
+                    returns_correlation_matrix = self.metrics_engine.calculate_returns_correlation_matrix(
+                        per_symbol_equity_curves
+                    )
+
             # Create result
             end_time = datetime.now()
             runtime = (end_time - start_time).total_seconds()
@@ -142,7 +159,10 @@ class Backtester(LoggerMixin):
                 config=self.config,
                 start_time=start_time,
                 end_time=end_time,
-                total_runtime_seconds=runtime
+                total_runtime_seconds=runtime,
+                per_symbol_equity_curves=per_symbol_equity_curves,
+                per_symbol_metrics=per_symbol_metrics,
+                returns_correlation_matrix=returns_correlation_matrix
             )
 
             self.logger.info(f"Backtest completed in {runtime:.2f} seconds")

@@ -86,10 +86,13 @@ class BacktestResult:
     start_time: datetime
     end_time: datetime
     total_runtime_seconds: float
+    per_symbol_equity_curves: Optional[Dict[str, pd.DataFrame]] = None
+    per_symbol_metrics: Optional[Dict[str, Dict[str, float]]] = None
+    returns_correlation_matrix: Optional[pd.DataFrame] = None
 
     def summary(self) -> Dict[str, Any]:
         """Return a summary of the backtest results"""
-        return {
+        summary_dict = {
             "performance": self.performance_metrics,
             "total_trades": len(self.trades),
             "runtime_seconds": self.total_runtime_seconds,
@@ -98,6 +101,13 @@ class BacktestResult:
                 "end": self.equity_curve.index[-1]
             }
         }
+
+        # Add per-symbol summary if available
+        if self.per_symbol_metrics:
+            summary_dict["symbols_tracked"] = list(self.per_symbol_metrics.keys())
+            summary_dict["num_symbols"] = len(self.per_symbol_metrics)
+
+        return summary_dict
 
 
 # Type aliases for strategy functions

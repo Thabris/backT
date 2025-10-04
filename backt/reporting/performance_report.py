@@ -108,9 +108,14 @@ class PerformanceReport(LoggerMixin):
         if initial_capital is not None:
             self.initial_capital = initial_capital
         elif not result.equity_curve.empty:
-            self.initial_capital = result.equity_curve.iloc[0]
+            # Extract total_equity value from first row
+            if 'total_equity' in result.equity_curve.columns:
+                self.initial_capital = float(result.equity_curve['total_equity'].iloc[0])
+            else:
+                # Fallback to first value of first column
+                self.initial_capital = float(result.equity_curve.iloc[0, 0])
         else:
-            self.initial_capital = 100000  # Default fallback
+            self.initial_capital = 100000.0  # Default fallback
 
         # Benchmark data storage
         self.benchmark_data = None
@@ -817,3 +822,189 @@ class PerformanceReport(LoggerMixin):
     def show_charts(self):
         """Convenience method to generate and show charts"""
         self.generate_charts(return_fig=False, show_plots=True)
+
+    # ========== Per-Symbol Performance Methods ==========
+
+    def get_per_symbol_metrics_dataframe(self, transpose: bool = True) -> pd.DataFrame:
+        """
+        Get per-symbol metrics as a DataFrame
+
+        Args:
+            transpose: If True, symbols as columns; if False, symbols as rows
+
+        Returns:
+            DataFrame with per-symbol metrics
+        """
+        if not self.result.per_symbol_metrics:
+            self.logger.warning("No per-symbol metrics available")
+            return pd.DataFrame()
+
+        # Convert to DataFrame
+        df = pd.DataFrame(self.result.per_symbol_metrics)
+
+        if transpose:
+            # Transpose so symbols are columns and metrics are rows
+            df = df.T
+
+        return df
+
+    def get_correlation_matrix(self) -> pd.DataFrame:
+        """
+        Get correlation matrix of returns between symbols
+
+        Returns:
+            Correlation matrix DataFrame
+        """
+        if self.result.returns_correlation_matrix is None:
+            self.logger.warning("No correlation matrix available")
+            return pd.DataFrame()
+
+        return self.result.returns_correlation_matrix
+
+    def print_per_symbol_metrics(self, top_n: Optional[int] = None):
+        """
+        Print per-symbol performance metrics
+
+        Args:
+            top_n: If specified, only show top N symbols by total PnL
+        """
+        if not self.result.per_symbol_metrics:
+            print("No per-symbol metrics available")
+            return
+
+        df = self.get_per_symbol_metrics_dataframe(transpose=True)
+
+        # Sort by total_pnl if available
+        if 'total_pnl' in df.index:
+            df = df.sort_values('total_pnl', axis=1, ascending=False)
+
+        # Limit to top N if specified
+        if top_n and top_n < len(df.columns):
+            df = df.iloc[:, :top_n]
+
+        print("\n" + "=" * 80)
+        print("PER-SYMBOL PERFORMANCE METRICS")
+        print("=" * 80)
+        print(df.to_string())
+        print()
+
+    def print_correlation_matrix(self, annot: bool = True):
+        """
+        Print correlation matrix
+
+        Args:
+            annot: If True, annotate with correlation values
+        """
+        corr_matrix = self.get_correlation_matrix()
+
+        if corr_matrix.empty:
+            print("No correlation matrix available (need 2+ symbols)")
+            return
+
+        print("\n" + "=" * 80)
+        print("RETURNS CORRELATION MATRIX")
+        print("=" * 80)
+        print(corr_matrix.to_string())
+        print()
+
+    def plot_per_symbol_pnl(self, figsize: tuple = (12, 6)):
+        """
+        Plot cumulative PnL for each symbol
+
+        Args:
+            figsize: Figure size tuple
+        """
+        if not HAS_MATPLOTLIB:
+            self.logger.error("matplotlib required for plotting")
+            return
+
+        if not self.result.per_symbol_equity_curves:
+            self.logger.warning("No per-symbol equity curves available")
+            return
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        for symbol, equity_curve in self.result.per_symbol_equity_curves.items():
+            if 'total_pnl' in equity_curve.columns:
+                ax.plot(equity_curve.index, equity_curve['total_pnl'], label=symbol, linewidth=2)
+
+        ax.set_title('Cumulative PnL by Symbol', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Total PnL ($)')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+        ax.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+
+        plt.tight_layout()
+        plt.show()
+
+        return fig
+
+    def plot_correlation_heatmap(self, figsize: tuple = (10, 8), annot: bool = True, cmap: str = 'coolwarm'):
+        """
+        Plot correlation matrix as a heatmap
+
+        Args:
+            figsize: Figure size tuple
+            annot: If True, annotate cells with correlation values
+            cmap: Colormap to use
+        """
+        if not HAS_MATPLOTLIB:
+            self.logger.error("matplotlib and seaborn required for plotting")
+            return
+
+        corr_matrix = self.get_correlation_matrix()
+
+        if corr_matrix.empty:
+            self.logger.warning("No correlation matrix available (need 2+ symbols)")
+            return
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        # Create heatmap
+        sns.heatmap(
+            corr_matrix,
+            annot=annot,
+            fmt='.2f',
+            cmap=cmap,
+            center=0,
+            vmin=-1,
+            vmax=1,
+            square=True,
+            linewidths=1,
+            cbar_kws={"shrink": 0.8},
+            ax=ax
+        )
+
+        ax.set_title('Returns Correlation Matrix', fontsize=14, fontweight='bold', pad=20)
+
+        plt.tight_layout()
+        plt.show()
+
+        return fig
+
+    def generate_per_symbol_report(self, show_plots: bool = True):
+        """
+        Generate comprehensive per-symbol analysis report
+
+        Args:
+            show_plots: If True, display plots
+        """
+        if not self.result.per_symbol_metrics:
+            print("No per-symbol data available")
+            return
+
+        # Print metrics table
+        self.print_per_symbol_metrics()
+
+        # Print correlation matrix if multiple symbols
+        if self.result.returns_correlation_matrix is not None:
+            self.print_correlation_matrix()
+
+        # Generate plots
+        if show_plots and HAS_MATPLOTLIB:
+            print("\nGenerating per-symbol visualizations...")
+            self.plot_per_symbol_pnl()
+
+            if self.result.returns_correlation_matrix is not None:
+                self.plot_correlation_heatmap()
