@@ -19,6 +19,13 @@ except ImportError:
     plt = None
     sns = None
 
+try:
+    import yfinance as yf
+    HAS_YFINANCE = True
+except ImportError:
+    HAS_YFINANCE = False
+    yf = None
+
 from ..utils.types import BacktestResult
 from ..utils.logging_config import LoggerMixin
 
@@ -48,9 +55,11 @@ class ReportConfig:
     figsize: tuple = (15, 10)
 
     # Benchmark comparison (optional)
-    benchmark_return: Optional[float] = None  # Annualized return (e.g., 0.08 for 8%)
-    benchmark_volatility: Optional[float] = None  # Annualized volatility (e.g., 0.15 for 15%)
+    benchmark_symbol: Optional[str] = 'SPY'  # Ticker to fetch (e.g., 'SPY', '^GSPC')
+    benchmark_return: Optional[float] = None  # Annualized return (manually specified)
+    benchmark_volatility: Optional[float] = None  # Annualized volatility (manually specified)
     benchmark_name: str = "Benchmark"
+    auto_fetch_benchmark: bool = True  # Automatically fetch benchmark data from Yahoo Finance
 
 
 class PerformanceReport(LoggerMixin):
@@ -102,6 +111,95 @@ class PerformanceReport(LoggerMixin):
             self.initial_capital = result.equity_curve.iloc[0]
         else:
             self.initial_capital = 100000  # Default fallback
+
+        # Benchmark data storage
+        self.benchmark_data = None
+        self.benchmark_metrics = None
+
+        # Auto-fetch benchmark if enabled and not manually specified
+        if (self.config.auto_fetch_benchmark and
+            self.config.benchmark_symbol and
+            self.config.benchmark_return is None):
+            self._fetch_benchmark_data()
+
+    def _fetch_benchmark_data(self):
+        """Fetch benchmark data from Yahoo Finance and calculate metrics"""
+        if not HAS_YFINANCE:
+            self.logger.warning("yfinance not available, cannot fetch benchmark data")
+            return
+
+        # Get date range from equity curve
+        if self.result.equity_curve.empty:
+            return
+
+        equity_curve = self.result.equity_curve
+        if isinstance(equity_curve, pd.DataFrame):
+            dates = equity_curve.index
+        else:
+            dates = equity_curve.index
+
+        start_date = dates[0]
+        end_date = dates[-1]
+
+        try:
+            self.logger.info(f"Fetching benchmark data for {self.config.benchmark_symbol}...")
+
+            # Fetch benchmark data
+            ticker = yf.Ticker(self.config.benchmark_symbol)
+            benchmark_df = ticker.history(start=start_date, end=end_date)
+
+            if benchmark_df.empty:
+                self.logger.warning(f"No data received for {self.config.benchmark_symbol}")
+                return
+
+            # Calculate benchmark returns
+            benchmark_prices = benchmark_df['Close']
+            benchmark_returns = benchmark_prices.pct_change().dropna()
+
+            # Calculate metrics
+            total_return = (benchmark_prices.iloc[-1] / benchmark_prices.iloc[0]) - 1
+            num_periods = len(benchmark_returns)
+            num_years = num_periods / 252  # Assuming daily data
+
+            if num_years > 0:
+                annualized_return = (1 + total_return) ** (1 / num_years) - 1
+            else:
+                annualized_return = 0
+
+            volatility = benchmark_returns.std() * np.sqrt(252)  # Annualized
+
+            # Calculate buy-and-hold value
+            bh_final_value = self.initial_capital * (1 + total_return)
+            bh_profit = bh_final_value - self.initial_capital
+
+            # Store benchmark data
+            self.benchmark_data = {
+                'prices': benchmark_prices,
+                'returns': benchmark_returns,
+                'final_value': bh_final_value,
+                'profit': bh_profit
+            }
+
+            self.benchmark_metrics = {
+                'total_return': total_return,
+                'annualized_return': annualized_return,
+                'volatility': volatility,
+                'final_value': bh_final_value,
+                'profit_loss': bh_profit
+            }
+
+            # Update config with calculated values
+            self.config.benchmark_return = annualized_return
+            self.config.benchmark_volatility = volatility
+            if self.config.benchmark_name == "Benchmark":
+                self.config.benchmark_name = f"{self.config.benchmark_symbol} (Buy & Hold)"
+
+            self.logger.info(f"Benchmark loaded: {total_return:.2%} total return")
+
+        except Exception as e:
+            self.logger.warning(f"Failed to fetch benchmark data: {e}")
+            self.benchmark_data = None
+            self.benchmark_metrics = None
 
     def format_text_report(self, use_emojis: bool = True) -> str:
         """
@@ -275,6 +373,31 @@ class PerformanceReport(LoggerMixin):
         lines.append(f"{'Sharpe Rating:':25} {sharpe_rating} ({sharpe:.2f})")
         lines.append(f"{'Risk Rating:':25} {dd_rating} ({max_dd:.1%} max DD)")
 
+        # Benchmark comparison
+        if self.benchmark_metrics:
+            bench_emoji = "📊 " if use_emojis else ""
+            lines.append(f"\n{bench_emoji}BENCHMARK COMPARISON:")
+            lines.append("-" * 25)
+
+            bench_return = self.benchmark_metrics['total_return']
+            bench_final = self.benchmark_metrics['final_value']
+            bench_profit = self.benchmark_metrics['profit_loss']
+
+            lines.append(f"{'Benchmark:':25} {self.config.benchmark_name}")
+            lines.append(f"{'Benchmark Return:':25} {bench_return:8.2%}")
+            lines.append(f"{'Benchmark Final Value:':25} ${bench_final:>10,.0f}")
+            lines.append(f"{'Benchmark Profit:':25} ${bench_profit:>10,.0f}")
+
+            # Outperformance
+            outperformance = total_return - bench_return
+            outperf_dollars = profit_loss - bench_profit
+
+            outperf_emoji = "🏆" if outperformance > 0 else "📉"
+            outperf_emoji = outperf_emoji if use_emojis else ""
+
+            lines.append(f"\n{'Outperformance:':25} {outperformance:+8.2%} ({outperf_emoji})")
+            lines.append(f"{'Excess Profit:':25} ${outperf_dollars:>+10,.0f}")
+
         # Final verdict
         verdict_emoji = "✅" if profit_loss > 0 else "❌"
         verdict_emoji = verdict_emoji if use_emojis else ""
@@ -285,12 +408,13 @@ class PerformanceReport(LoggerMixin):
 
         return "\n".join(lines)
 
-    def get_metrics_dict(self, include_calculated: bool = True) -> Dict[str, Any]:
+    def get_metrics_dict(self, include_calculated: bool = True, include_benchmark: bool = True) -> Dict[str, Any]:
         """
         Get metrics as dictionary
 
         Args:
             include_calculated: Include calculated fields like final_value, profit_loss
+            include_benchmark: Include benchmark metrics if available
 
         Returns:
             Dictionary of metrics
@@ -304,6 +428,23 @@ class PerformanceReport(LoggerMixin):
             metrics['initial_capital'] = self.initial_capital
             metrics['final_value'] = final_value
             metrics['profit_loss'] = final_value - self.initial_capital
+
+        # Add benchmark metrics
+        if include_benchmark and self.benchmark_metrics:
+            metrics['benchmark_symbol'] = self.config.benchmark_symbol
+            metrics['benchmark_total_return'] = self.benchmark_metrics['total_return']
+            metrics['benchmark_annualized_return'] = self.benchmark_metrics['annualized_return']
+            metrics['benchmark_volatility'] = self.benchmark_metrics['volatility']
+            metrics['benchmark_final_value'] = self.benchmark_metrics['final_value']
+            metrics['benchmark_profit_loss'] = self.benchmark_metrics['profit_loss']
+
+            # Calculate outperformance
+            total_return = metrics.get('total_return', 0)
+            final_value = self.initial_capital * (1 + total_return)
+            profit_loss = final_value - self.initial_capital
+
+            metrics['outperformance'] = total_return - self.benchmark_metrics['total_return']
+            metrics['excess_profit'] = profit_loss - self.benchmark_metrics['profit_loss']
 
         return metrics
 
