@@ -907,12 +907,16 @@ class PerformanceReport(LoggerMixin):
         print(corr_matrix.to_string())
         print()
 
-    def plot_per_symbol_pnl(self, figsize: tuple = (12, 6)):
+    def plot_per_symbol_pnl(self, figsize: tuple = (12, 6), show: bool = True):
         """
         Plot cumulative PnL for each symbol
 
         Args:
             figsize: Figure size tuple
+            show: If True, display the plot immediately; if False, return figure for manual display
+
+        Returns:
+            Matplotlib figure object if show=False, None otherwise
         """
         if not HAS_MATPLOTLIB:
             self.logger.error("matplotlib required for plotting")
@@ -936,11 +940,14 @@ class PerformanceReport(LoggerMixin):
         ax.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
 
         plt.tight_layout()
-        plt.show()
 
-        return fig
+        if show:
+            plt.show()
+            return None
+        else:
+            return fig
 
-    def plot_correlation_heatmap(self, figsize: tuple = (10, 8), annot: bool = True, cmap: str = 'coolwarm'):
+    def plot_correlation_heatmap(self, figsize: tuple = (10, 8), annot: bool = True, cmap: str = 'coolwarm', show: bool = True):
         """
         Plot correlation matrix as a heatmap
 
@@ -948,6 +955,10 @@ class PerformanceReport(LoggerMixin):
             figsize: Figure size tuple
             annot: If True, annotate cells with correlation values
             cmap: Colormap to use
+            show: If True, display the plot immediately; if False, return figure for manual display
+
+        Returns:
+            Matplotlib figure object if show=False, None otherwise
         """
         if not HAS_MATPLOTLIB:
             self.logger.error("matplotlib and seaborn required for plotting")
@@ -979,9 +990,12 @@ class PerformanceReport(LoggerMixin):
         ax.set_title('Returns Correlation Matrix', fontsize=14, fontweight='bold', pad=20)
 
         plt.tight_layout()
-        plt.show()
 
-        return fig
+        if show:
+            plt.show()
+            return None
+        else:
+            return fig
 
     def generate_per_symbol_report(self, show_plots: bool = True):
         """

@@ -60,8 +60,16 @@ class Backtester(LoggerMixin):
         else:
             self.data_loader = data_loader or YahooDataLoader()
             self.logger.info("Using Yahoo Finance data loader")
-        self.execution_engine = execution_engine or MockExecutionEngine(config.execution)
+
+        # Initialize portfolio first (needed by execution engine)
         self.portfolio = portfolio_manager or PortfolioManager(config)
+
+        # Initialize execution engine with portfolio reference for risk checks
+        self.execution_engine = execution_engine or MockExecutionEngine(
+            config.execution,
+            portfolio_manager=self.portfolio
+        )
+
         self.metrics_engine = metrics_engine or MetricsEngine(config)
         self.trade_logger = TradeLogger()
 

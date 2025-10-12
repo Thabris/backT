@@ -93,8 +93,8 @@ class BacktestConfig:
             raise ValueError("Initial capital must be positive")
 
         # Validate leverage
-        if self.max_leverage < 1.0:
-            raise ValueError("Max leverage must be >= 1.0")
+        if self.max_leverage is not None and self.max_leverage < 1.0:
+            raise ValueError("Max leverage must be >= 1.0 or None")
 
         # Validate position size mode
         valid_modes = {"shares", "notional", "weight"}
