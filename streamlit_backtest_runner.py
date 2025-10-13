@@ -503,28 +503,22 @@ def render_results_sheet():
     # Charts Section
     st.subheader("📈 Performance Charts")
 
-    # Generate charts from report
-    import matplotlib.pyplot as plt
-    import io
-    from PIL import Image
+    # Generate all charts from report
+    try:
+        charts = report.generate_charts(return_fig=True, show_plots=False)
 
-    # Equity Curve
-    fig_equity = report.plot_equity_curve(show=False)
-    if fig_equity:
-        st.pyplot(fig_equity)
-        plt.close(fig_equity)
-
-    # Drawdown Chart
-    fig_dd = report.plot_drawdown(show=False)
-    if fig_dd:
-        st.pyplot(fig_dd)
-        plt.close(fig_dd)
-
-    # Monthly Returns Heatmap
-    fig_heatmap = report.plot_monthly_returns_heatmap(show=False)
-    if fig_heatmap:
-        st.pyplot(fig_heatmap)
-        plt.close(fig_heatmap)
+        if charts and isinstance(charts, list):
+            for fig in charts:
+                if fig is not None:
+                    st.pyplot(fig)
+                    import matplotlib.pyplot as plt
+                    plt.close(fig)
+        elif charts:
+            st.pyplot(charts)
+            import matplotlib.pyplot as plt
+            plt.close(charts)
+    except Exception as e:
+        st.warning(f"Could not generate some charts: {str(e)}")
 
     st.divider()
 
@@ -549,18 +543,26 @@ def render_results_sheet():
             )
 
         # Per-symbol PnL chart
-        fig_per_symbol = report.plot_per_symbol_pnl(show=False)
-        if fig_per_symbol:
+        try:
+            import matplotlib.pyplot as plt
+            fig_per_symbol = plt.figure()
+            report.plot_per_symbol_pnl(show=False)
             st.pyplot(fig_per_symbol)
             plt.close(fig_per_symbol)
+        except Exception as e:
+            st.info(f"Per-symbol PnL chart not available: {str(e)}")
 
         # Correlation heatmap
         corr_matrix = report.get_correlation_matrix()
         if corr_matrix is not None and not corr_matrix.empty:
-            fig_corr = report.plot_correlation_heatmap(show=False)
-            if fig_corr:
+            try:
+                import matplotlib.pyplot as plt
+                fig_corr = plt.figure()
+                report.plot_correlation_heatmap(show=False)
                 st.pyplot(fig_corr)
                 plt.close(fig_corr)
+            except Exception as e:
+                st.info(f"Correlation heatmap not available: {str(e)}")
 
     st.divider()
 
