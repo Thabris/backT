@@ -693,7 +693,7 @@ def render_results_sheet():
                 config.end_date
             )
 
-            if spy_data and benchmark_symbol in spy_data:
+            if spy_data is not None and benchmark_symbol in spy_data:
                 # Calculate benchmark equity curve
                 spy_prices = spy_data[benchmark_symbol]['close']
                 initial_shares = config.initial_capital / spy_prices.iloc[0]
