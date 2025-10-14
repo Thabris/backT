@@ -61,12 +61,41 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_spy_benchmark_data(start_date: str, end_date: str, initial_capital: float):
+def load_spy_benchmark_data_from_backtest(backtest_result, initial_capital: float, backtest_symbols: list):
     """
-    Load SPY benchmark data with caching
-    Cached for 1 hour to avoid repeated API calls
+    Load SPY benchmark data, reusing backtest data if SPY was in the universe
     Returns tuple: (benchmark_df, error_message)
+    """
+    # Check if SPY was in the backtest
+    if 'SPY' in backtest_symbols and hasattr(backtest_result, 'market_data') and backtest_result.market_data is not None:
+        try:
+            if 'SPY' in backtest_result.market_data:
+                spy_prices = backtest_result.market_data['SPY']['close']
+                initial_shares = initial_capital / spy_prices.iloc[0]
+                benchmark_equity = spy_prices * initial_shares
+
+                benchmark_df = pd.DataFrame({
+                    'total_equity': benchmark_equity,
+                    'total_pnl': benchmark_equity - initial_capital
+                }, index=spy_prices.index)
+
+                return (benchmark_df, None)
+        except Exception as e:
+            pass  # Fall through to loading from Yahoo
+
+    # If SPY not in backtest or failed to extract, load from Yahoo Finance
+    return _load_spy_from_yahoo(
+        backtest_result.equity_curve.index[0].strftime('%Y-%m-%d'),
+        backtest_result.equity_curve.index[-1].strftime('%Y-%m-%d'),
+        initial_capital
+    )
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_spy_from_yahoo(start_date: str, end_date: str, initial_capital: float):
+    """
+    Load SPY data from Yahoo Finance with caching
+    Internal function called by load_spy_benchmark_data_from_backtest
     """
     try:
         from backt.data.loaders import YahooDataLoader
@@ -638,8 +667,9 @@ def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatma
     ax.set_xlabel('Month', fontsize=12)
     ax.set_ylabel('Year', fontsize=12)
 
-    # Set month labels
-    month_labels = [calendar.month_abbr[i] for i in range(1, 13)]
+    # Set month labels only for columns that exist in the pivot table
+    existing_months = pivot_table.columns.tolist()
+    month_labels = [calendar.month_abbr[int(m)] for m in existing_months]
     ax.set_xticklabels(month_labels, rotation=0)
 
     plt.tight_layout()
@@ -778,11 +808,12 @@ def render_results_sheet():
     with col2:
         st.markdown("**Benchmark Performance (SPY Buy & Hold)**")
         try:
-            # Load SPY benchmark data using cached function
-            benchmark_df, error_msg = load_spy_benchmark_data(
-                config.start_date,
-                config.end_date,
-                config.initial_capital
+            # Load SPY benchmark data - reuse backtest data if SPY was included
+            backtest_symbols = st.session_state.get('backtest_symbols', [])
+            benchmark_df, error_msg = load_spy_benchmark_data_from_backtest(
+                result,
+                config.initial_capital,
+                backtest_symbols
             )
 
             if benchmark_df is not None:
