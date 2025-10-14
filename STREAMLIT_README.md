@@ -32,11 +32,16 @@ Professional multi-sheet web interface for running backtests with the BackT fram
 ### Installation
 
 ```bash
-# Install Streamlit if not already installed
-pip install streamlit
+# Install required dependencies
+pip install streamlit yfinance
 
-# Or install with BackT
+# Or install with BackT (includes all dependencies)
 pip install -e ".[web]"
+```
+
+**Note**: `yfinance` is required for loading benchmark data (SPY) and real market data. If you see "yfinance not installed" errors, run:
+```bash
+pip install yfinance
 ```
 
 ### Running the App

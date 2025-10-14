@@ -102,7 +102,11 @@ def _load_spy_from_yahoo(start_date: str, end_date: str, initial_capital: float)
 
             return (benchmark_df, None)
         else:
-            return (None, "SPY data not available from Yahoo Finance")
+            return (None, "SPY data not available from Yahoo Finance. Check your internet connection.")
+    except ImportError as e:
+        if 'yfinance' in str(e):
+            return (None, "yfinance not installed. Install with: pip install yfinance")
+        return (None, f"Import error: {str(e)}")
     except Exception as e:
         return (None, f"Error loading SPY data: {str(e)}")
 
