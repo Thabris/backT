@@ -887,14 +887,89 @@ def render_results_sheet():
     with st.expander("📊 Detailed Metrics"):
         st.dataframe(metrics_df, use_container_width=True)
 
-    # Trade History
-    with st.expander("💼 Trade History"):
+    # Trade History (Detailed)
+    with st.expander("💼 Detailed Trade History", expanded=False):
         if not result.trades.empty:
+            trades_df = result.trades.copy()
+
+            # Add helpful info
+            st.markdown(f"""
+            **Total Fills: {len(trades_df)}** (each buy/sell is counted as one fill)
+
+            Note: A complete round-trip trade (open + close) = 2 fills.
+            High fill count may indicate frequent rebalancing or position adjustments.
+            """)
+
+            # Trade statistics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                buys = len(trades_df[trades_df['side'] == 'buy'])
+                st.metric("Buy Fills", buys)
+            with col2:
+                sells = len(trades_df[trades_df['side'] == 'sell'])
+                st.metric("Sell Fills", sells)
+            with col3:
+                symbols = trades_df['symbol'].nunique()
+                st.metric("Symbols Traded", symbols)
+            with col4:
+                avg_size = trades_df['value'].mean()
+                st.metric("Avg Fill Size", f"${avg_size:,.0f}")
+
+            st.divider()
+
+            # Per-symbol breakdown
+            st.markdown("**Fills by Symbol:**")
+            symbol_trades = trades_df.groupby('symbol').agg({
+                'quantity': 'sum',
+                'value': 'sum',
+                'commission': 'sum'
+            }).round(2)
+            symbol_trades['num_fills'] = trades_df.groupby('symbol').size()
+            symbol_trades = symbol_trades.sort_values('num_fills', ascending=False)
+            st.dataframe(symbol_trades, use_container_width=True)
+
+            st.divider()
+
+            # Full trade log
+            st.markdown("**Full Trade Log:**")
+
+            # Prepare display dataframe
+            display_df = trades_df.reset_index()
+            display_df['timestamp'] = display_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+            # Reorder columns for better readability
+            base_columns = ['timestamp', 'symbol', 'side', 'quantity', 'price', 'value', 'commission']
+            meta_columns = [col for col in display_df.columns if col.startswith('meta_')]
+            other_columns = [col for col in display_df.columns if col not in base_columns + meta_columns]
+
+            ordered_columns = base_columns + meta_columns + other_columns
+            ordered_columns = [col for col in ordered_columns if col in display_df.columns]
+
+            display_df = display_df[ordered_columns]
+
+            # Show trades with pagination
+            rows_per_page = st.selectbox("Rows per page", [50, 100, 250, 500], index=1, key="trades_rows")
+            total_pages = (len(display_df) - 1) // rows_per_page + 1
+            page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key="trades_page")
+
+            start_idx = (page - 1) * rows_per_page
+            end_idx = start_idx + rows_per_page
+
             st.dataframe(
-                result.trades.head(100),
-                use_container_width=True
+                display_df.iloc[start_idx:end_idx],
+                use_container_width=True,
+                hide_index=True
             )
-            st.caption(f"Showing first 100 of {len(result.trades)} trades")
+            st.caption(f"Showing fills {start_idx + 1}-{min(end_idx, len(display_df))} of {len(display_df)} total fills")
+
+            # Download button
+            csv = trades_df.to_csv()
+            st.download_button(
+                label="📥 Download All Trades as CSV",
+                data=csv,
+                file_name="backtest_trades.csv",
+                mime="text/csv"
+            )
         else:
             st.info("No trades executed")
 
