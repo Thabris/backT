@@ -21,6 +21,7 @@ from datetime import datetime, date
 from typing import Dict, Any
 import importlib
 import inspect
+from functools import lru_cache
 
 # Import BackT components
 from backt import Backtester, BacktestConfig
@@ -58,6 +59,88 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_spy_benchmark_data(start_date: str, end_date: str, initial_capital: float):
+    """
+    Load SPY benchmark data with caching
+    Cached for 1 hour to avoid repeated API calls
+    """
+    try:
+        from backt.data.loaders import YahooDataLoader
+        loader = YahooDataLoader()
+
+        spy_data = loader.load(
+            ['SPY'],
+            start_date,
+            end_date
+        )
+
+        if spy_data is not None and 'SPY' in spy_data:
+            spy_prices = spy_data['SPY']['close']
+            initial_shares = initial_capital / spy_prices.iloc[0]
+            benchmark_equity = spy_prices * initial_shares
+
+            benchmark_df = pd.DataFrame({
+                'total_equity': benchmark_equity,
+                'total_pnl': benchmark_equity - initial_capital
+            }, index=spy_prices.index)
+
+            return benchmark_df
+    except Exception as e:
+        return None
+
+    return None
+
+
+@st.cache_data(show_spinner=False)
+def calculate_monthly_metric_series(equity_curve_hash: str, equity_curve_dict: dict, metric: str):
+    """
+    Calculate monthly metric series with caching
+    Uses hash to invalidate cache when equity curve changes
+    """
+    # Reconstruct equity_curve from dict
+    equity_curve = pd.DataFrame(equity_curve_dict)
+    equity_curve.index = pd.to_datetime(equity_curve.index)
+
+    # Calculate the metric
+    if metric == 'returns':
+        series = equity_curve['total_equity'].pct_change()
+        agg_method = 'sum'
+    elif metric == 'pnl':
+        series = equity_curve['total_pnl']
+        agg_method = 'sum'
+    elif metric == 'drawdown':
+        equity = equity_curve['total_equity']
+        running_max = equity.expanding().max()
+        series = (equity - running_max) / running_max
+        agg_method = 'mean'
+    elif metric == 'volatility':
+        series = equity_curve['total_equity'].pct_change().rolling(20).std()
+        agg_method = 'mean'
+    elif metric == 'sharpe_ratio':
+        returns = equity_curve['total_equity'].pct_change()
+        series = (returns.rolling(20).mean() / returns.rolling(20).std()) * np.sqrt(252)
+        agg_method = 'mean'
+    else:
+        series = equity_curve['total_equity'].pct_change()
+        agg_method = 'sum'
+
+    # Create monthly pivot table
+    df = pd.DataFrame({
+        'value': series,
+        'year': series.index.year,
+        'month': series.index.month
+    })
+
+    # Aggregate by month
+    if agg_method == 'sum':
+        monthly = df.groupby(['year', 'month'])['value'].sum()
+    else:
+        monthly = df.groupby(['year', 'month'])['value'].mean()
+
+    return monthly
 
 
 def get_available_strategies():
@@ -438,7 +521,7 @@ def render_strategy_sheet():
                 st.exception(e)
 
 
-def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatmap'):
+def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatmap', use_cache=True):
     """
     Create a monthly heatmap for a given metric
 
@@ -450,6 +533,8 @@ def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatma
         Metric to display: 'returns', 'pnl', 'drawdown', 'volatility', 'sharpe_ratio'
     title : str
         Chart title
+    use_cache : bool
+        Whether to use cached calculations (default: True)
 
     Returns:
     --------
@@ -459,58 +544,53 @@ def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatma
     import seaborn as sns
     import calendar
 
-    # Calculate the metric
-    if metric == 'returns':
-        series = equity_curve['total_equity'].pct_change()
-        format_str = '{:.2%}'
-        cmap = 'RdYlGn'
-        agg_method = 'sum'
-    elif metric == 'pnl':
-        series = equity_curve['total_pnl']
-        format_str = '${:,.0f}'
-        cmap = 'RdYlGn'
-        agg_method = 'sum'
-    elif metric == 'drawdown':
-        equity = equity_curve['total_equity']
-        running_max = equity.expanding().max()
-        series = (equity - running_max) / running_max
-        format_str = '{:.2%}'
-        cmap = 'RdYlGn_r'  # Reverse: red for large drawdowns
-        agg_method = 'mean'
-    elif metric == 'volatility':
-        series = equity_curve['total_equity'].pct_change().rolling(20).std()
-        format_str = '{:.2%}'
-        cmap = 'YlOrRd'
-        agg_method = 'mean'
-    elif metric == 'sharpe_ratio':
-        # Calculate daily returns
-        returns = equity_curve['total_equity'].pct_change()
-        # Calculate rolling Sharpe ratio (annualized)
-        # Sharpe = (mean return / std return) * sqrt(252)
-        series = (returns.rolling(20).mean() / returns.rolling(20).std()) * np.sqrt(252)
-        format_str = '{:.2f}'
-        cmap = 'RdYlGn'
-        agg_method = 'mean'
-    else:
-        series = equity_curve['total_equity'].pct_change()
-        format_str = '{:.2%}'
-        cmap = 'RdYlGn'
-        agg_method = 'sum'
+    # Use cached calculation if enabled
+    if use_cache:
+        # Create a hash of the equity curve for cache invalidation
+        equity_hash = str(hash(tuple(equity_curve['total_equity'].head(10)))) + str(hash(tuple(equity_curve['total_equity'].tail(10))))
 
-    # Create monthly pivot table
-    df = pd.DataFrame({
-        'value': series,
-        'year': series.index.year,
-        'month': series.index.month
-    })
+        # Convert equity_curve to dict for caching (DataFrames aren't hashable)
+        equity_dict = {
+            'total_equity': equity_curve['total_equity'].tolist(),
+            'total_pnl': equity_curve['total_pnl'].tolist(),
+            'index': equity_curve.index.astype(str).tolist()
+        }
 
-    # Aggregate by month
-    if agg_method == 'sum':
-        # Sum for returns and pnl
-        monthly = df.groupby(['year', 'month'])['value'].sum()
+        monthly = calculate_monthly_metric_series(equity_hash, equity_dict, metric)
     else:
-        # Average for drawdown, volatility, and sharpe
-        monthly = df.groupby(['year', 'month'])['value'].mean()
+        # Original calculation without caching
+        if metric == 'returns':
+            series = equity_curve['total_equity'].pct_change()
+            agg_method = 'sum'
+        elif metric == 'pnl':
+            series = equity_curve['total_pnl']
+            agg_method = 'sum'
+        elif metric == 'drawdown':
+            equity = equity_curve['total_equity']
+            running_max = equity.expanding().max()
+            series = (equity - running_max) / running_max
+            agg_method = 'mean'
+        elif metric == 'volatility':
+            series = equity_curve['total_equity'].pct_change().rolling(20).std()
+            agg_method = 'mean'
+        elif metric == 'sharpe_ratio':
+            returns = equity_curve['total_equity'].pct_change()
+            series = (returns.rolling(20).mean() / returns.rolling(20).std()) * np.sqrt(252)
+            agg_method = 'mean'
+        else:
+            series = equity_curve['total_equity'].pct_change()
+            agg_method = 'sum'
+
+        df = pd.DataFrame({
+            'value': series,
+            'year': series.index.year,
+            'month': series.index.month
+        })
+
+        if agg_method == 'sum':
+            monthly = df.groupby(['year', 'month'])['value'].sum()
+        else:
+            monthly = df.groupby(['year', 'month'])['value'].mean()
 
     # Pivot to heatmap format
     monthly_df = monthly.reset_index()
@@ -670,7 +750,8 @@ def render_results_sheet():
             strategy_heatmap = create_monthly_heatmap(
                 result.equity_curve,
                 metric=selected_metric,
-                title=f'Strategy - Monthly {selected_metric.capitalize()}'
+                title=f'Strategy - Monthly {selected_metric.capitalize()}',
+                use_cache=True
             )
             st.pyplot(strategy_heatmap)
             import matplotlib.pyplot as plt
@@ -681,63 +762,26 @@ def render_results_sheet():
     with col2:
         st.markdown("**Benchmark Performance (SPY Buy & Hold)**")
         try:
-            benchmark_symbol = 'SPY'
-            spy_prices = None
+            # Load SPY benchmark data using cached function
+            benchmark_df = load_spy_benchmark_data(
+                config.start_date,
+                config.end_date,
+                config.initial_capital
+            )
 
-            # First, check if SPY was in the backtest symbols
-            backtest_symbols = st.session_state.get('backtest_symbols', [])
-            spy_in_backtest = benchmark_symbol in backtest_symbols
-
-            # If SPY was backtested, extract its data from per-symbol results
-            if spy_in_backtest and result.per_symbol_equity_curves and benchmark_symbol in result.per_symbol_equity_curves:
-                # Get SPY equity curve and back-calculate prices
-                spy_equity_curve = result.per_symbol_equity_curves[benchmark_symbol]
-                # The per-symbol equity is already calculated, we need the price data
-                # We'll reload SPY to get actual prices for buy-and-hold comparison
-                pass  # Fall through to loading logic
-
-            # Load SPY data (either it wasn't in backtest, or we need prices for buy-and-hold)
-            try:
-                from backt.data.loaders import YahooDataLoader
-                loader = YahooDataLoader()
-
-                # Load SPY data for the same period
-                spy_data = loader.load(
-                    [benchmark_symbol],
-                    config.start_date,
-                    config.end_date
-                )
-
-                if spy_data is not None and benchmark_symbol in spy_data:
-                    spy_prices = spy_data[benchmark_symbol]['close']
-            except Exception as load_error:
-                if spy_in_backtest:
-                    st.info(f"SPY was in your backtest. Unable to reload for benchmark comparison: {str(load_error)}")
-                else:
-                    st.info(f"Could not load SPY benchmark data: {str(load_error)}")
-
-            if spy_prices is not None:
-                # Calculate benchmark equity curve
-                initial_shares = config.initial_capital / spy_prices.iloc[0]
-                benchmark_equity = spy_prices * initial_shares
-
-                # Create benchmark equity curve dataframe
-                benchmark_df = pd.DataFrame({
-                    'total_equity': benchmark_equity,
-                    'total_pnl': benchmark_equity - config.initial_capital
-                }, index=spy_prices.index)
-
-                # Generate benchmark heatmap
+            if benchmark_df is not None:
+                # Generate benchmark heatmap with caching
                 benchmark_heatmap = create_monthly_heatmap(
                     benchmark_df,
                     metric=selected_metric,
-                    title=f'SPY Benchmark - Monthly {selected_metric.capitalize()}'
+                    title=f'SPY Benchmark - Monthly {selected_metric.capitalize()}',
+                    use_cache=True
                 )
                 st.pyplot(benchmark_heatmap)
                 import matplotlib.pyplot as plt
                 plt.close(benchmark_heatmap)
             else:
-                st.info("SPY benchmark data not available. Make sure you have internet connection or include SPY in your trading universe.")
+                st.info("SPY benchmark data not available. Make sure you have internet connection.")
 
         except Exception as e:
             st.warning(f"Could not generate benchmark heatmap: {str(e)}")
