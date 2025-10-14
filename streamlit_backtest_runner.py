@@ -437,6 +437,97 @@ def render_strategy_sheet():
                 st.exception(e)
 
 
+def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatmap'):
+    """
+    Create a monthly heatmap for a given metric
+
+    Parameters:
+    -----------
+    equity_curve : pd.DataFrame
+        Equity curve with datetime index
+    metric : str
+        Metric to display: 'returns', 'pnl', 'drawdown', 'volatility'
+    title : str
+        Chart title
+
+    Returns:
+    --------
+    matplotlib.figure.Figure
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import calendar
+
+    # Calculate the metric
+    if metric == 'returns':
+        series = equity_curve['total_equity'].pct_change()
+        format_str = '{:.2%}'
+        cmap = 'RdYlGn'
+    elif metric == 'pnl':
+        series = equity_curve['total_pnl']
+        format_str = '${:,.0f}'
+        cmap = 'RdYlGn'
+    elif metric == 'drawdown':
+        equity = equity_curve['total_equity']
+        running_max = equity.expanding().max()
+        series = (equity - running_max) / running_max
+        format_str = '{:.2%}'
+        cmap = 'RdYlGn_r'  # Reverse: red for large drawdowns
+    elif metric == 'volatility':
+        series = equity_curve['total_equity'].pct_change().rolling(20).std()
+        format_str = '{:.2%}'
+        cmap = 'YlOrRd'
+    else:
+        series = equity_curve['total_equity'].pct_change()
+        format_str = '{:.2%}'
+        cmap = 'RdYlGn'
+
+    # Create monthly pivot table
+    df = pd.DataFrame({
+        'value': series,
+        'year': series.index.year,
+        'month': series.index.month
+    })
+
+    # Aggregate by month
+    if metric in ['returns', 'pnl']:
+        # Sum for returns and pnl
+        monthly = df.groupby(['year', 'month'])['value'].sum()
+    else:
+        # Average for drawdown and volatility
+        monthly = df.groupby(['year', 'month'])['value'].mean()
+
+    # Pivot to heatmap format
+    monthly_df = monthly.reset_index()
+    pivot_table = monthly_df.pivot(index='year', columns='month', values='value')
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Create heatmap
+    sns.heatmap(
+        pivot_table,
+        annot=True,
+        fmt='.1%' if metric in ['returns', 'drawdown', 'volatility'] else '.0f',
+        cmap=cmap,
+        center=0 if metric in ['returns', 'pnl', 'drawdown'] else None,
+        cbar_kws={'label': metric.capitalize()},
+        ax=ax
+    )
+
+    # Set labels
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.set_xlabel('Month', fontsize=12)
+    ax.set_ylabel('Year', fontsize=12)
+
+    # Set month labels
+    month_labels = [calendar.month_abbr[i] for i in range(1, 13)]
+    ax.set_xticklabels(month_labels, rotation=0)
+
+    plt.tight_layout()
+    return fig
+
+
 def render_results_sheet():
     """Sheet 3: Results and Analysis"""
     st.header("📊 Backtest Results")
@@ -519,6 +610,93 @@ def render_results_sheet():
             plt.close(charts)
     except Exception as e:
         st.warning(f"Could not generate some charts: {str(e)}")
+
+    st.divider()
+
+    # Monthly Heatmap Comparison Section
+    st.subheader("📅 Monthly Performance Heatmap Comparison")
+
+    # Metric selector
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        selected_metric = st.selectbox(
+            "Select Metric",
+            options=['returns', 'pnl', 'drawdown', 'volatility'],
+            format_func=lambda x: {
+                'returns': 'Returns (%)',
+                'pnl': 'Profit/Loss ($)',
+                'drawdown': 'Drawdown (%)',
+                'volatility': 'Volatility (%)'
+            }[x],
+            key='heatmap_metric_selector'
+        )
+
+    # Get benchmark data if available
+    try:
+        metrics_df = report.get_metrics_dataframe(transpose=True)
+        has_benchmark = 'SPY (Buy & Hold)' in metrics_df.columns or len(metrics_df.columns) > 1
+    except:
+        has_benchmark = False
+
+    # Create heatmaps
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Strategy Performance**")
+        try:
+            strategy_heatmap = create_monthly_heatmap(
+                result.equity_curve,
+                metric=selected_metric,
+                title=f'Strategy - Monthly {selected_metric.capitalize()}'
+            )
+            st.pyplot(strategy_heatmap)
+            import matplotlib.pyplot as plt
+            plt.close(strategy_heatmap)
+        except Exception as e:
+            st.error(f"Could not generate strategy heatmap: {str(e)}")
+
+    with col2:
+        st.markdown("**Benchmark Performance (SPY Buy & Hold)**")
+        try:
+            # Load SPY benchmark data
+            from backt.data.loaders import YahooDataLoader
+
+            benchmark_symbol = 'SPY'
+            loader = YahooDataLoader()
+
+            # Load SPY data for the same period
+            spy_data = loader.load(
+                [benchmark_symbol],
+                config.start_date,
+                config.end_date
+            )
+
+            if spy_data and benchmark_symbol in spy_data:
+                # Calculate benchmark equity curve
+                spy_prices = spy_data[benchmark_symbol]['close']
+                initial_shares = config.initial_capital / spy_prices.iloc[0]
+                benchmark_equity = spy_prices * initial_shares
+
+                # Create benchmark equity curve dataframe
+                benchmark_df = pd.DataFrame({
+                    'total_equity': benchmark_equity,
+                    'total_pnl': benchmark_equity - config.initial_capital
+                }, index=spy_prices.index)
+
+                # Generate benchmark heatmap
+                benchmark_heatmap = create_monthly_heatmap(
+                    benchmark_df,
+                    metric=selected_metric,
+                    title=f'SPY Benchmark - Monthly {selected_metric.capitalize()}'
+                )
+                st.pyplot(benchmark_heatmap)
+                import matplotlib.pyplot as plt
+                plt.close(benchmark_heatmap)
+            else:
+                st.info("Could not load SPY benchmark data. Make sure you have internet connection.")
+
+        except Exception as e:
+            st.warning(f"Could not generate benchmark heatmap: {str(e)}\nNote: Benchmark comparison requires internet connection to fetch SPY data.")
 
     st.divider()
 
