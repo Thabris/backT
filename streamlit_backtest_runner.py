@@ -84,14 +84,30 @@ def _load_spy_from_yahoo(start_date: str, end_date: str, initial_capital: float)
         from backt.data.loaders import YahooDataLoader
         loader = YahooDataLoader()
 
+        # Load SPY - when loading a single symbol, loader returns DataFrame directly
         spy_data = loader.load(
             ['SPY'],
             start_date,
             end_date
         )
 
-        if spy_data is not None and 'SPY' in spy_data:
-            spy_prices = spy_data['SPY']['close']
+        # Check if we got data (could be DataFrame for single symbol or dict)
+        if spy_data is not None:
+            # If it's a dict (multiple symbols), extract SPY
+            if isinstance(spy_data, dict):
+                if 'SPY' in spy_data:
+                    spy_prices = spy_data['SPY']['close']
+                else:
+                    return (None, "SPY not in returned data")
+            # If it's a DataFrame (single symbol), use directly
+            elif isinstance(spy_data, pd.DataFrame):
+                if 'close' in spy_data.columns:
+                    spy_prices = spy_data['close']
+                else:
+                    return (None, "Close prices not found in SPY data")
+            else:
+                return (None, f"Unexpected data type: {type(spy_data)}")
+
             initial_shares = initial_capital / spy_prices.iloc[0]
             benchmark_equity = spy_prices * initial_shares
 
