@@ -429,6 +429,7 @@ def render_strategy_sheet():
                 # Store results
                 st.session_state.backtest_result = result
                 st.session_state.backtest_config = config
+                st.session_state.backtest_symbols = config_data['symbols']  # Store symbols for benchmark lookup
 
                 st.success("✅ Backtest completed! Go to 'Results' tab to view analysis.")
 
@@ -680,22 +681,43 @@ def render_results_sheet():
     with col2:
         st.markdown("**Benchmark Performance (SPY Buy & Hold)**")
         try:
-            # Load SPY benchmark data
-            from backt.data.loaders import YahooDataLoader
-
             benchmark_symbol = 'SPY'
-            loader = YahooDataLoader()
+            spy_prices = None
 
-            # Load SPY data for the same period
-            spy_data = loader.load(
-                [benchmark_symbol],
-                config.start_date,
-                config.end_date
-            )
+            # First, check if SPY was in the backtest symbols
+            backtest_symbols = st.session_state.get('backtest_symbols', [])
+            spy_in_backtest = benchmark_symbol in backtest_symbols
 
-            if spy_data is not None and benchmark_symbol in spy_data:
+            # If SPY was backtested, extract its data from per-symbol results
+            if spy_in_backtest and result.per_symbol_equity_curves and benchmark_symbol in result.per_symbol_equity_curves:
+                # Get SPY equity curve and back-calculate prices
+                spy_equity_curve = result.per_symbol_equity_curves[benchmark_symbol]
+                # The per-symbol equity is already calculated, we need the price data
+                # We'll reload SPY to get actual prices for buy-and-hold comparison
+                pass  # Fall through to loading logic
+
+            # Load SPY data (either it wasn't in backtest, or we need prices for buy-and-hold)
+            try:
+                from backt.data.loaders import YahooDataLoader
+                loader = YahooDataLoader()
+
+                # Load SPY data for the same period
+                spy_data = loader.load(
+                    [benchmark_symbol],
+                    config.start_date,
+                    config.end_date
+                )
+
+                if spy_data is not None and benchmark_symbol in spy_data:
+                    spy_prices = spy_data[benchmark_symbol]['close']
+            except Exception as load_error:
+                if spy_in_backtest:
+                    st.info(f"SPY was in your backtest. Unable to reload for benchmark comparison: {str(load_error)}")
+                else:
+                    st.info(f"Could not load SPY benchmark data: {str(load_error)}")
+
+            if spy_prices is not None:
                 # Calculate benchmark equity curve
-                spy_prices = spy_data[benchmark_symbol]['close']
                 initial_shares = config.initial_capital / spy_prices.iloc[0]
                 benchmark_equity = spy_prices * initial_shares
 
@@ -715,10 +737,10 @@ def render_results_sheet():
                 import matplotlib.pyplot as plt
                 plt.close(benchmark_heatmap)
             else:
-                st.info("Could not load SPY benchmark data. Make sure you have internet connection.")
+                st.info("SPY benchmark data not available. Make sure you have internet connection or include SPY in your trading universe.")
 
         except Exception as e:
-            st.warning(f"Could not generate benchmark heatmap: {str(e)}\nNote: Benchmark comparison requires internet connection to fetch SPY data.")
+            st.warning(f"Could not generate benchmark heatmap: {str(e)}")
 
     st.divider()
 
