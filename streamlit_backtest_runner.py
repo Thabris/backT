@@ -66,6 +66,7 @@ def load_spy_benchmark_data(start_date: str, end_date: str, initial_capital: flo
     """
     Load SPY benchmark data with caching
     Cached for 1 hour to avoid repeated API calls
+    Returns tuple: (benchmark_df, error_message)
     """
     try:
         from backt.data.loaders import YahooDataLoader
@@ -87,11 +88,13 @@ def load_spy_benchmark_data(start_date: str, end_date: str, initial_capital: flo
                 'total_pnl': benchmark_equity - initial_capital
             }, index=spy_prices.index)
 
-            return benchmark_df
+            return (benchmark_df, None)
+        else:
+            return (None, "SPY data not available from Yahoo Finance")
     except Exception as e:
-        return None
+        return (None, f"Error loading SPY data: {str(e)}")
 
-    return None
+    return (None, "Unknown error")
 
 
 @st.cache_data(show_spinner=False)
@@ -596,17 +599,30 @@ def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatma
     monthly_df = monthly.reset_index()
     pivot_table = monthly_df.pivot(index='year', columns='month', values='value')
 
+    # Determine color map and formatting based on metric
+    if metric == 'returns':
+        fmt = '.1%'
+        cmap = 'RdYlGn'
+    elif metric == 'pnl':
+        fmt = '.0f'
+        cmap = 'RdYlGn'
+    elif metric == 'drawdown':
+        fmt = '.1%'
+        cmap = 'RdYlGn_r'  # Reverse: red for large drawdowns
+    elif metric == 'volatility':
+        fmt = '.1%'
+        cmap = 'YlOrRd'
+    elif metric == 'sharpe_ratio':
+        fmt = '.2f'
+        cmap = 'RdYlGn'
+    else:
+        fmt = '.1%'
+        cmap = 'RdYlGn'
+
     # Create figure
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Create heatmap with appropriate formatting
-    if metric in ['returns', 'drawdown', 'volatility']:
-        fmt = '.1%'
-    elif metric == 'sharpe_ratio':
-        fmt = '.2f'
-    else:  # pnl
-        fmt = '.0f'
-
+    # Create heatmap
     sns.heatmap(
         pivot_table,
         annot=True,
@@ -763,7 +779,7 @@ def render_results_sheet():
         st.markdown("**Benchmark Performance (SPY Buy & Hold)**")
         try:
             # Load SPY benchmark data using cached function
-            benchmark_df = load_spy_benchmark_data(
+            benchmark_df, error_msg = load_spy_benchmark_data(
                 config.start_date,
                 config.end_date,
                 config.initial_capital
@@ -781,7 +797,7 @@ def render_results_sheet():
                 import matplotlib.pyplot as plt
                 plt.close(benchmark_heatmap)
             else:
-                st.info("SPY benchmark data not available. Make sure you have internet connection.")
+                st.info(f"SPY benchmark data not available. {error_msg if error_msg else 'Please check your internet connection.'}")
 
         except Exception as e:
             st.warning(f"Could not generate benchmark heatmap: {str(e)}")
