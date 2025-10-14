@@ -446,7 +446,7 @@ def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatma
     equity_curve : pd.DataFrame
         Equity curve with datetime index
     metric : str
-        Metric to display: 'returns', 'pnl', 'drawdown', 'volatility'
+        Metric to display: 'returns', 'pnl', 'drawdown', 'volatility', 'sharpe_ratio'
     title : str
         Chart title
 
@@ -463,24 +463,38 @@ def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatma
         series = equity_curve['total_equity'].pct_change()
         format_str = '{:.2%}'
         cmap = 'RdYlGn'
+        agg_method = 'sum'
     elif metric == 'pnl':
         series = equity_curve['total_pnl']
         format_str = '${:,.0f}'
         cmap = 'RdYlGn'
+        agg_method = 'sum'
     elif metric == 'drawdown':
         equity = equity_curve['total_equity']
         running_max = equity.expanding().max()
         series = (equity - running_max) / running_max
         format_str = '{:.2%}'
         cmap = 'RdYlGn_r'  # Reverse: red for large drawdowns
+        agg_method = 'mean'
     elif metric == 'volatility':
         series = equity_curve['total_equity'].pct_change().rolling(20).std()
         format_str = '{:.2%}'
         cmap = 'YlOrRd'
+        agg_method = 'mean'
+    elif metric == 'sharpe_ratio':
+        # Calculate daily returns
+        returns = equity_curve['total_equity'].pct_change()
+        # Calculate rolling Sharpe ratio (annualized)
+        # Sharpe = (mean return / std return) * sqrt(252)
+        series = (returns.rolling(20).mean() / returns.rolling(20).std()) * np.sqrt(252)
+        format_str = '{:.2f}'
+        cmap = 'RdYlGn'
+        agg_method = 'mean'
     else:
         series = equity_curve['total_equity'].pct_change()
         format_str = '{:.2%}'
         cmap = 'RdYlGn'
+        agg_method = 'sum'
 
     # Create monthly pivot table
     df = pd.DataFrame({
@@ -490,11 +504,11 @@ def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatma
     })
 
     # Aggregate by month
-    if metric in ['returns', 'pnl']:
+    if agg_method == 'sum':
         # Sum for returns and pnl
         monthly = df.groupby(['year', 'month'])['value'].sum()
     else:
-        # Average for drawdown and volatility
+        # Average for drawdown, volatility, and sharpe
         monthly = df.groupby(['year', 'month'])['value'].mean()
 
     # Pivot to heatmap format
@@ -504,14 +518,21 @@ def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatma
     # Create figure
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Create heatmap
+    # Create heatmap with appropriate formatting
+    if metric in ['returns', 'drawdown', 'volatility']:
+        fmt = '.1%'
+    elif metric == 'sharpe_ratio':
+        fmt = '.2f'
+    else:  # pnl
+        fmt = '.0f'
+
     sns.heatmap(
         pivot_table,
         annot=True,
-        fmt='.1%' if metric in ['returns', 'drawdown', 'volatility'] else '.0f',
+        fmt=fmt,
         cmap=cmap,
-        center=0 if metric in ['returns', 'pnl', 'drawdown'] else None,
-        cbar_kws={'label': metric.capitalize()},
+        center=0 if metric in ['returns', 'pnl', 'drawdown', 'sharpe_ratio'] else None,
+        cbar_kws={'label': metric.replace('_', ' ').title()},
         ax=ax
     )
 
@@ -621,9 +642,10 @@ def render_results_sheet():
     with col1:
         selected_metric = st.selectbox(
             "Select Metric",
-            options=['returns', 'pnl', 'drawdown', 'volatility'],
+            options=['returns', 'sharpe_ratio', 'pnl', 'drawdown', 'volatility'],
             format_func=lambda x: {
                 'returns': 'Returns (%)',
+                'sharpe_ratio': 'Sharpe Ratio',
                 'pnl': 'Profit/Loss ($)',
                 'drawdown': 'Drawdown (%)',
                 'volatility': 'Volatility (%)'
