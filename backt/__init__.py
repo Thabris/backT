@@ -36,8 +36,9 @@ from backt.portfolio.portfolio_manager import PortfolioManager
 from backt.risk.metrics import MetricsEngine
 from backt.utils.types import Position, Fill, BacktestResult
 from backt.optimization import StrategyOptimizer, OptimizationResult
+from backt.validation import CPCVValidator, CPCVConfig, CPCVResult, ParameterGrid
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"  # Upgraded to 0.2.0 with CPCV support
 __author__ = "BackT Development Team"
 
 __all__ = [
@@ -53,5 +54,10 @@ __all__ = [
     "Fill",
     "BacktestResult",
     "StrategyOptimizer",
-    "OptimizationResult"
+    "OptimizationResult",
+    # CPCV Validation (New in 0.2.0)
+    "CPCVValidator",
+    "CPCVConfig",
+    "CPCVResult",
+    "ParameterGrid"
 ]

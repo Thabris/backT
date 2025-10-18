@@ -32,12 +32,106 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Custom CSS - Compact layout with breathing room
 st.markdown("""
 <style>
+    /* Reduce padding and margins globally */
+    .block-container {
+        padding-top: 1.2rem;
+        padding-bottom: 0.5rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+    .element-container {
+        margin-bottom: 0.4rem;
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.3rem;
+    }
+    div[data-testid="stMetricDelta"] {
+        font-size: 0.85rem;
+    }
+    h1 {
+        padding-top: 0rem;
+        margin-bottom: 0.6rem;
+        font-size: 2.1rem;
+    }
+    h2 {
+        margin-top: 1rem;
+        margin-bottom: 0.4rem;
+        padding-top: 0.4rem;
+        font-size: 1.4rem;
+    }
+    h3 {
+        margin-top: 0.6rem;
+        margin-bottom: 0.3rem;
+        font-size: 1.15rem;
+    }
+    .stButton button {
+        margin-top: 0.6rem;
+        margin-bottom: 0.4rem;
+    }
+    div[data-testid="column"] {
+        padding: 0.3rem;
+    }
+    /* Compact sidebar */
+    section[data-testid="stSidebar"] .block-container {
+        padding-top: 1rem;
+        padding-bottom: 0.6rem;
+    }
+    section[data-testid="stSidebar"] .element-container {
+        margin-bottom: 0.4rem;
+    }
+    section[data-testid="stSidebar"] h2 {
+        margin-top: 0.6rem;
+        margin-bottom: 0.4rem;
+        font-size: 1.15rem;
+    }
+    section[data-testid="stSidebar"] h3 {
+        margin-top: 0.4rem;
+        margin-bottom: 0.3rem;
+        font-size: 1.05rem;
+    }
+    section[data-testid="stSidebar"] label {
+        font-size: 0.88rem;
+        margin-bottom: 0.3rem;
+    }
+    section[data-testid="stSidebar"] .stNumberInput,
+    section[data-testid="stSidebar"] .stTextInput,
+    section[data-testid="stSidebar"] .stDateInput,
+    section[data-testid="stSidebar"] .stSelectbox {
+        margin-bottom: 0.4rem;
+    }
+    section[data-testid="stSidebar"] input {
+        padding: 0.35rem 0.6rem;
+        font-size: 0.88rem;
+    }
+    section[data-testid="stSidebar"] .row-widget.stRadio > div {
+        gap: 0.6rem;
+    }
+    section[data-testid="stSidebar"] .row-widget.stRadio label {
+        font-size: 0.85rem;
+    }
+    /* Compact dataframes */
+    div[data-testid="stDataFrame"] {
+        margin-top: 0.4rem;
+        margin-bottom: 0.4rem;
+    }
+    /* Compact expanders */
+    .streamlit-expanderHeader {
+        font-size: 0.92rem;
+    }
+    /* Compact metrics */
+    div[data-testid="metric-container"] {
+        padding: 0.4rem 0.6rem;
+    }
+    /* Compact charts */
+    div[data-testid="stPlotlyChart"] {
+        margin-bottom: 0.6rem;
+    }
     .metric-card {
         background-color: #f0f2f6;
-        padding: 1rem;
+        padding: 0.6rem;
         border-radius: 0.5rem;
         border-left: 4px solid #ff6b6b;
     }
@@ -161,7 +255,9 @@ def create_equity_chart(equity_curve):
         title="Portfolio Equity Curve",
         xaxis_title="Date",
         yaxis_title="Portfolio Value ($)",
-        hovermode='x unified'
+        hovermode='x unified',
+        height=380,
+        margin=dict(l=50, r=20, t=45, b=45)
     )
 
     return fig
@@ -189,7 +285,9 @@ def create_drawdown_chart(equity_curve):
         title="Portfolio Drawdown",
         xaxis_title="Date",
         yaxis_title="Drawdown (%)",
-        hovermode='x unified'
+        hovermode='x unified',
+        height=380,
+        margin=dict(l=50, r=20, t=45, b=45)
     )
 
     return fig
@@ -200,111 +298,77 @@ def main():
 
     # Header
     st.title("🚀 BackT - Professional Trading Backtester")
-    st.markdown("**Real-time strategy backtesting with professional-grade analytics**")
+    st.caption("Real-time strategy backtesting with professional-grade analytics")
 
     # Sidebar Configuration
     with st.sidebar:
-        st.header("⚙️ Configuration")
+        st.subheader("⚙️ Configuration")
 
-        # Date inputs
+        # Date inputs - compact
         col1, col2 = st.columns(2)
         with col1:
-            start_date = st.date_input(
-                "Start Date",
-                value=date(2022, 1, 1),
-                max_value=date.today()
-            )
+            start_date = st.date_input("Start", value=date(2022, 1, 1), max_value=date.today(), label_visibility="visible")
         with col2:
-            end_date = st.date_input(
-                "End Date",
-                value=date(2023, 1, 1),
-                max_value=date.today()
-            )
+            end_date = st.date_input("End", value=date(2023, 1, 1), max_value=date.today(), label_visibility="visible")
 
-        # Capital and symbols
-        initial_capital = st.number_input(
-            "Initial Capital ($)",
-            value=100000,
-            min_value=1000,
-            step=1000,
-            format="%d"
-        )
-
-        symbols_input = st.text_input(
-            "Symbols (comma-separated)",
-            value="AAPL",
-            help="Enter stock symbols separated by commas"
-        )
+        # Capital and symbols - compact
+        initial_capital = st.number_input("Capital ($)", value=100000, min_value=1000, step=10000, format="%d")
+        symbols_input = st.text_input("Symbols", value="AAPL", placeholder="AAPL, MSFT, TSLA")
         symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
 
-        # Data source
-        data_source = st.radio(
-            "Data Source",
-            ["Yahoo Finance", "Synthetic Data"],
-            help="Yahoo Finance for real data, Synthetic for demo"
-        )
+        # Data source - compact
+        data_source = st.radio("Data", ["Yahoo Finance", "Synthetic"], horizontal=True)
 
-        st.divider()
+        # Strategy selection - compact
+        st.subheader("📊 Strategy")
+        strategy_type = st.selectbox("Type", ["Moving Average Crossover", "Buy and Hold", "RSI Mean Reversion"], label_visibility="collapsed")
 
-        # Strategy selection
-        st.header("📊 Strategy")
-        strategy_type = st.selectbox(
-            "Strategy Type",
-            ["Moving Average Crossover", "Buy and Hold", "RSI Mean Reversion"]
-        )
-
-        # Strategy parameters
+        # Strategy parameters - compact
         strategy_params = {}
 
         if strategy_type == "Moving Average Crossover":
             col1, col2 = st.columns(2)
             with col1:
-                strategy_params['short_period'] = st.number_input(
-                    "Short MA", value=20, min_value=1, max_value=100
-                )
+                strategy_params['short_period'] = st.number_input("Short", value=20, min_value=1, max_value=100, step=1)
             with col2:
-                strategy_params['long_period'] = st.number_input(
-                    "Long MA", value=50, min_value=1, max_value=200
-                )
+                strategy_params['long_period'] = st.number_input("Long", value=50, min_value=1, max_value=200, step=5)
 
         elif strategy_type == "RSI Mean Reversion":
-            strategy_params['rsi_period'] = st.number_input(
-                "RSI Period", value=14, min_value=2, max_value=50
-            )
+            strategy_params['rsi_period'] = st.number_input("Period", value=14, min_value=2, max_value=50)
             col1, col2 = st.columns(2)
             with col1:
-                strategy_params['rsi_oversold'] = st.number_input(
-                    "Oversold", value=30, min_value=10, max_value=50
-                )
+                strategy_params['rsi_oversold'] = st.number_input("Low", value=30, min_value=10, max_value=50)
             with col2:
-                strategy_params['rsi_overbought'] = st.number_input(
-                    "Overbought", value=70, min_value=50, max_value=90
-                )
+                strategy_params['rsi_overbought'] = st.number_input("High", value=70, min_value=50, max_value=90)
 
-        # Advanced settings
-        with st.expander("🔧 Advanced Settings"):
-            commission = st.number_input(
-                "Commission per share ($)", value=0.001, min_value=0.0, step=0.001, format="%.3f"
-            )
-            slippage = st.number_input(
-                "Slippage (%)", value=0.05, min_value=0.0, max_value=1.0, step=0.01, format="%.2f"
-            )
+        # Advanced settings - compact
+        with st.expander("🔧 Advanced"):
+            col1, col2 = st.columns(2)
+            with col1:
+                commission = st.number_input("Commission", value=0.001, min_value=0.0, step=0.001, format="%.3f")
+            with col2:
+                slippage = st.number_input("Slippage %", value=0.05, min_value=0.0, max_value=1.0, step=0.01, format="%.2f")
 
-    # Main content area
-    col1, col2, col3, col4 = st.columns(4)
-
+    # Main content area - compact summary
+    col1, col2, col3, col4, col5 = st.columns([1, 1.5, 1, 1.5, 2])
     with col1:
         st.metric("Symbols", len(symbols))
     with col2:
         st.metric("Capital", f"${initial_capital:,}")
     with col3:
         days = (end_date - start_date).days
-        st.metric("Period (days)", days)
+        st.metric("Days", days)
     with col4:
         st.metric("Strategy", strategy_type.split()[0])
+    with col5:
+        st.write("")  # Spacer
+        if st.button("🚀 Run Backtest", type="primary", use_container_width=True):
+            run_backtest = True
+        else:
+            run_backtest = False
 
-    # Run backtest button
-    if st.button("🚀 Run Backtest", type="primary", use_container_width=True):
+    # Run backtest
+    if run_backtest:
 
         # Progress indicators
         progress_bar = st.progress(0)
@@ -336,7 +400,7 @@ def main():
                     # Test connection
                     test_data = data_loader.load(symbols[0], start_date.strftime('%Y-%m-%d'), start_date.strftime('%Y-%m-%d'))
                 except:
-                    st.warning("Yahoo Finance failed, using synthetic data")
+                    st.warning("⚠️ Yahoo Finance failed, using synthetic data")
                     data_loader = CustomDataLoader(synthetic_data_loader)
             else:
                 data_loader = CustomDataLoader(synthetic_data_loader)
@@ -373,10 +437,10 @@ def main():
             status_text.text("✅ Backtest completed successfully!")
 
             # Display results
-            st.success(f"Backtest completed in {result.total_runtime_seconds:.2f} seconds!")
+            st.success(f"✅ Backtest completed in {result.total_runtime_seconds:.2f}s")
 
             # Performance metrics
-            st.header("📈 Performance Metrics")
+            st.subheader("📈 Performance Metrics")
 
             metrics = result.performance_metrics
 
@@ -426,7 +490,7 @@ def main():
                     st.metric("Calmar Ratio", "N/A")
 
             # Charts
-            st.header("📊 Performance Charts")
+            st.subheader("📊 Performance Charts")
 
             if not result.equity_curve.empty:
                 col1, col2 = st.columns(2)
@@ -441,31 +505,28 @@ def main():
 
             # Trade analysis
             if not result.trades.empty:
-                st.header("💼 Trade Analysis")
+                st.subheader("💼 Trade Analysis")
 
-                col1, col2 = st.columns(2)
+                col1, col2, col3, col4 = st.columns(4)
+                buy_trades = len(result.trades[result.trades['side'] == 'buy'])
+                sell_trades = len(result.trades[result.trades['side'] == 'sell'])
 
                 with col1:
-                    st.subheader("Trade Summary")
-                    buy_trades = len(result.trades[result.trades['side'] == 'buy'])
-                    sell_trades = len(result.trades[result.trades['side'] == 'sell'])
-
-                    st.write(f"**Buy Trades:** {buy_trades}")
-                    st.write(f"**Sell Trades:** {sell_trades}")
-                    st.write(f"**Average Trade Size:** ${result.trades['value'].mean():,.2f}")
-                    st.write(f"**Total Commission:** ${result.trades['commission'].sum():,.2f}")
-
+                    st.metric("Buy Trades", buy_trades)
                 with col2:
-                    st.subheader("Recent Trades")
-                    recent_trades = result.trades.tail(5)[['side', 'quantity', 'price', 'value']]
-                    st.dataframe(recent_trades, use_container_width=True)
+                    st.metric("Sell Trades", sell_trades)
+                with col3:
+                    st.metric("Avg Trade Size", f"${result.trades['value'].mean():,.0f}")
+                with col4:
+                    st.metric("Total Commission", f"${result.trades['commission'].sum():,.2f}")
+
+                st.caption("Recent Trades")
+                recent_trades = result.trades.tail(5)[['side', 'quantity', 'price', 'value']]
+                st.dataframe(recent_trades, use_container_width=True, hide_index=True)
 
             # Portfolio timeline
             if not result.equity_curve.empty:
-                st.header("💰 Portfolio Timeline")
-
-                portfolio_summary = result.equity_curve[['total_equity', 'cash', 'total_pnl']].tail(10)
-                st.line_chart(portfolio_summary)
+                st.subheader("💰 Portfolio Timeline")
 
                 # Summary statistics
                 initial_equity = result.equity_curve['total_equity'].iloc[0]
@@ -475,13 +536,16 @@ def main():
 
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("Initial Value", f"${initial_equity:,.2f}")
+                    st.metric("Initial Value", f"${initial_equity:,.0f}")
                 with col2:
-                    st.metric("Final Value", f"${final_equity:,.2f}")
+                    st.metric("Final Value", f"${final_equity:,.0f}")
                 with col3:
-                    st.metric("Peak Value", f"${max_equity:,.2f}")
+                    st.metric("Peak Value", f"${max_equity:,.0f}")
                 with col4:
-                    st.metric("Lowest Value", f"${min_equity:,.2f}")
+                    st.metric("Lowest Value", f"${min_equity:,.0f}")
+
+                portfolio_summary = result.equity_curve[['total_equity', 'cash', 'total_pnl']].tail(10)
+                st.line_chart(portfolio_summary, height=280)
 
         except Exception as e:
             st.error(f"Backtest failed: {str(e)}")
@@ -494,27 +558,29 @@ def main():
 
     else:
         # Default state - show instructions
-        st.info("""
-        👋 **Welcome to BackT!**
+        col1, col2 = st.columns([1, 1])
 
-        Configure your backtest parameters in the sidebar and click **"Run Backtest"** to begin.
+        with col1:
+            st.info("👋 **Welcome to BackT!** Configure parameters in the sidebar and click **Run Backtest** to begin.")
 
-        **Features:**
-        - 📊 Multiple built-in strategies
-        - 📈 Real-time performance metrics
-        - 🎯 Interactive charts and analysis
-        - ⚡ Lightning-fast execution
-        - 🔧 Professional-grade analytics
-        """)
+        with col2:
+            st.markdown("""
+            **Features:** 📊 Multiple strategies • 📈 Performance metrics • 🎯 Interactive charts • ⚡ Fast execution
+            """)
 
         # Show sample data
-        st.header("📋 Sample Configuration")
-        st.write("**Current Settings:**")
-        st.write(f"- **Symbols:** {', '.join(symbols)}")
-        st.write(f"- **Period:** {start_date} to {end_date}")
-        st.write(f"- **Capital:** ${initial_capital:,}")
-        st.write(f"- **Strategy:** {strategy_type}")
-        st.write(f"- **Data Source:** {data_source}")
+        st.subheader("📋 Current Configuration")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            st.write(f"**Symbols:** {', '.join(symbols)}")
+        with col2:
+            st.write(f"**Start:** {start_date}")
+        with col3:
+            st.write(f"**End:** {end_date}")
+        with col4:
+            st.write(f"**Capital:** ${initial_capital:,}")
+        with col5:
+            st.write(f"**Strategy:** {strategy_type.split()[0]}")
 
 
 if __name__ == "__main__":

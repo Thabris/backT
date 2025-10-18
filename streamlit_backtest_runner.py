@@ -21,12 +21,15 @@ from datetime import datetime, date
 from typing import Dict, Any
 import importlib
 import inspect
+import math
 from functools import lru_cache
 
 # Import BackT components
 from backt import Backtester, BacktestConfig
 from backt.reporting import PerformanceReport
 from backt.utils.config import ExecutionConfig
+from backt.validation import CPCVValidator, CPCVConfig, ParameterGrid
+from backt.validation.overfitting import interpret_overfitting_metrics
 
 # Import all strategies from strategies module
 from strategies import momentum
@@ -58,43 +61,43 @@ st.markdown("""
     /* Reduce overall padding */
     .block-container {
         padding-top: 2rem !important;
-        padding-bottom: 1rem !important;
+        padding-bottom: 1.2rem !important;
     }
 
     /* Header styling */
     h1 {
-        font-size: 2rem !important;
+        font-size: 2.1rem !important;
         font-weight: 600 !important;
         color: #1f77b4 !important;
-        margin-bottom: 0.5rem !important;
+        margin-bottom: 0.6rem !important;
     }
 
     h2 {
-        font-size: 1.3rem !important;
+        font-size: 1.4rem !important;
         font-weight: 500 !important;
-        margin-top: 1rem !important;
-        margin-bottom: 0.8rem !important;
+        margin-top: 1.1rem !important;
+        margin-bottom: 0.9rem !important;
     }
 
     h3 {
-        font-size: 1.1rem !important;
+        font-size: 1.15rem !important;
         font-weight: 500 !important;
-        margin-top: 0.8rem !important;
-        margin-bottom: 0.5rem !important;
+        margin-top: 0.9rem !important;
+        margin-bottom: 0.6rem !important;
     }
 
     /* Compact tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: #f8f9fa;
-        padding: 0.5rem;
+        padding: 0.6rem;
         border-radius: 8px;
     }
 
     .stTabs [data-baseweb="tab"] {
-        height: 40px !important;
-        padding: 0 16px !important;
-        font-size: 0.9rem !important;
+        height: 44px !important;
+        padding: 0 18px !important;
+        font-size: 0.92rem !important;
         border-radius: 6px;
         transition: all 0.2s ease;
     }
@@ -110,8 +113,8 @@ st.markdown("""
 
     /* Compact buttons */
     .stButton > button {
-        font-size: 0.85rem !important;
-        padding: 0.4rem 1rem !important;
+        font-size: 0.88rem !important;
+        padding: 0.45rem 1.1rem !important;
         border-radius: 6px !important;
         font-weight: 500 !important;
         transition: all 0.2s ease !important;
@@ -130,18 +133,18 @@ st.markdown("""
 
     /* Metric cards - more professional */
     [data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
+        font-size: 1.9rem !important;
         font-weight: 600 !important;
     }
 
     [data-testid="stMetricLabel"] {
-        font-size: 0.85rem !important;
+        font-size: 0.88rem !important;
         color: #6c757d !important;
         font-weight: 500 !important;
     }
 
     [data-testid="stMetricDelta"] {
-        font-size: 0.8rem !important;
+        font-size: 0.85rem !important;
     }
 
     /* Compact forms */
@@ -149,13 +152,13 @@ st.markdown("""
     .stNumberInput > div > div > input,
     .stSelectbox > div > div,
     .stDateInput > div > div > input {
-        font-size: 0.85rem !important;
-        padding: 0.4rem 0.6rem !important;
+        font-size: 0.88rem !important;
+        padding: 0.45rem 0.65rem !important;
     }
 
     /* Labels - smaller and muted */
     label {
-        font-size: 0.85rem !important;
+        font-size: 0.88rem !important;
         font-weight: 500 !important;
         color: #495057 !important;
     }
@@ -166,32 +169,32 @@ st.markdown("""
     }
 
     [data-testid="stSidebar"] h2 {
-        font-size: 1.1rem !important;
+        font-size: 1.15rem !important;
         color: #2c3e50 !important;
     }
 
     /* Caption text - smaller */
     .stCaption {
-        font-size: 0.75rem !important;
+        font-size: 0.8rem !important;
         color: #6c757d !important;
     }
 
     /* Compact expanders */
     .streamlit-expanderHeader {
-        font-size: 0.9rem !important;
+        font-size: 0.92rem !important;
         font-weight: 500 !important;
-        padding: 0.5rem 1rem !important;
+        padding: 0.6rem 1.1rem !important;
     }
 
     /* Success/Warning/Error messages - compact */
     .stSuccess, .stWarning, .stError, .stInfo {
-        padding: 0.5rem 1rem !important;
-        font-size: 0.85rem !important;
+        padding: 0.6rem 1.1rem !important;
+        font-size: 0.88rem !important;
     }
 
     /* Divider - subtle */
     hr {
-        margin: 1rem 0 !important;
+        margin: 1.1rem 0 !important;
         border-color: #e9ecef !important;
     }
 
@@ -202,12 +205,29 @@ st.markdown("""
 
     /* Remove extra spacing */
     .element-container {
-        margin-bottom: 0.5rem !important;
+        margin-bottom: 0.4rem !important;
     }
 
     /* Compact columns */
     [data-testid="column"] {
-        padding: 0 0.5rem !important;
+        padding: 0 0.4rem !important;
+    }
+
+    /* Compact forms */
+    .stForm {
+        border: none !important;
+        padding: 0.6rem !important;
+    }
+
+    /* Compact captions */
+    .stCaption {
+        margin-bottom: 0.3rem !important;
+        margin-top: 0.4rem !important;
+    }
+
+    /* Tighter input fields */
+    .stTextInput input, .stNumberInput input, .stDateInput input {
+        height: 2.4rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -438,106 +458,54 @@ def extract_strategy_params(strategy_func):
 
 def render_configuration_sheet():
     """Sheet 1: Backtest Configuration"""
-    st.header("⚙️ Backtest Configuration")
+    st.subheader("⚙️ Backtest Configuration")
 
     with st.form("config_form"):
-        # Date Range
-        st.subheader("📅 Date Range")
-        col1, col2 = st.columns(2)
+        # Date Range - compact with breathing room
+        col1, col2, col3, col4 = st.columns([1.5, 1.5, 1.5, 1])
         with col1:
-            start_date = st.date_input(
-                "Start Date",
-                value=date(2020, 1, 1),
-                max_value=date.today()
-            )
+            st.caption("📅 **Dates**")
+            start_date = st.date_input("Start", value=date(2020, 1, 1), max_value=date.today())
         with col2:
-            end_date = st.date_input(
-                "End Date",
-                value=date(2023, 12, 31),
-                max_value=date.today()
-            )
+            st.markdown("<p style='font-size: 0.8rem; color: transparent; margin-bottom: 0.3rem; margin-top: 0.4rem; line-height: 1.2;'>**.**</p>", unsafe_allow_html=True)
+            end_date = st.date_input("End", value=date(2023, 12, 31), max_value=date.today())
+        with col3:
+            st.caption("💰 **Capital**")
+            initial_capital = st.number_input("Initial ($)", value=100000, min_value=1000, step=10000, format="%d")
+        with col4:
+            st.markdown("<p style='font-size: 0.8rem; color: transparent; margin-bottom: 0.3rem; margin-top: 0.4rem; line-height: 1.2;'>**.**</p>", unsafe_allow_html=True)
+            allow_short = st.checkbox("Short", value=True, help="Allow short selling")
 
-        # Capital Settings
-        st.subheader("💰 Capital Settings")
-        col1, col2 = st.columns(2)
-        with col1:
-            initial_capital = st.number_input(
-                "Initial Capital ($)",
-                value=100000,
-                min_value=1000,
-                step=1000,
-                format="%d"
-            )
-        with col2:
-            allow_short = st.checkbox("Allow Short Selling", value=True)
+        st.write("")  # Small spacer
 
-        # Trading Universe
-        st.subheader("🌍 Trading Universe")
-        universe_input = st.text_area(
-            "Symbols (comma-separated)",
-            value="SPY, QQQ, TLT, GLD",
-            help="Enter stock symbols separated by commas"
-        )
+        # Trading Universe - compact
+        st.caption("🌍 **Trading Universe**")
+        universe_input = st.text_input("Symbols", value="SPY, QQQ, TLT, GLD", placeholder="SPY, QQQ, TLT, GLD", label_visibility="collapsed")
         symbols = [s.strip().upper() for s in universe_input.split(',') if s.strip()]
-        st.caption(f"Selected {len(symbols)} symbols: {', '.join(symbols[:5])}{'...' if len(symbols) > 5 else ''}")
 
-        # Execution Costs
-        st.subheader("💸 Execution Costs")
+        st.write("")  # Small spacer
+
+        # Execution Costs - compact
+        st.caption("💸 **Execution Costs**")
         col1, col2, col3 = st.columns(3)
         with col1:
-            spread = st.number_input(
-                "Bid-Ask Spread (%)",
-                value=0.0,
-                min_value=0.0,
-                max_value=1.0,
-                step=0.01,
-                format="%.2f"
-            )
+            spread = st.number_input("Spread %", value=0.0, min_value=0.0, max_value=1.0, step=0.01, format="%.2f")
         with col2:
-            slippage_pct = st.number_input(
-                "Slippage (%)",
-                value=0.0,
-                min_value=0.0,
-                max_value=1.0,
-                step=0.01,
-                format="%.2f"
-            )
+            slippage_pct = st.number_input("Slippage %", value=0.0, min_value=0.0, max_value=1.0, step=0.01, format="%.2f")
         with col3:
-            commission_per_share = st.number_input(
-                "Commission per share ($)",
-                value=0.0,
-                min_value=0.0,
-                step=0.001,
-                format="%.3f"
-            )
+            commission_per_share = st.number_input("Commission", value=0.0, min_value=0.0, step=0.001, format="%.3f")
 
-        # Risk Management
-        st.subheader("🛡️ Risk Management")
-        col1, col2 = st.columns(2)
+        st.write("")  # Small spacer
+
+        # Risk Management - compact
+        st.caption("🛡️ **Risk Management**")
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            max_leverage = st.number_input(
-                "Max Leverage (1.0 = 100%)",
-                value=2.0,
-                min_value=1.0,
-                max_value=10.0,
-                step=0.5,
-                help="Maximum portfolio leverage allowed"
-            )
+            max_leverage = st.number_input("Max Leverage", value=2.0, min_value=1.0, max_value=10.0, step=0.5)
         with col2:
-            max_position_size = st.number_input(
-                "Max Position Size (0.25 = 25%)",
-                value=0.25,
-                min_value=0.01,
-                max_value=1.0,
-                step=0.05,
-                help="Maximum single position as fraction of portfolio"
-            )
-
-        # Data Settings
-        st.subheader("📊 Data Settings")
-        use_mock_data = st.checkbox("Use Mock Data (for testing)", value=False)
-
-        st.divider()
+            max_position_size = st.number_input("Max Position", value=0.25, min_value=0.01, max_value=1.0, step=0.05, format="%.2f")
+        with col3:
+            use_mock_data = st.checkbox("Mock Data", value=False, help="Use mock data for testing")
 
         # Compact save button
         col1, col2, col3 = st.columns([1, 1, 1])
@@ -564,7 +532,7 @@ def render_configuration_sheet():
 
 def render_strategy_sheet():
     """Sheet 2: Strategy Selection and Parameters"""
-    st.header("📈 Strategy Selection")
+    st.subheader("📈 Strategy Selection")
 
     if 'config' not in st.session_state:
         st.warning("⚠️ Please configure backtest parameters first in the 'Configuration' tab.")
@@ -577,33 +545,32 @@ def render_strategy_sheet():
         st.error("No strategies found! Make sure strategies are properly defined in the strategies/ folder.")
         return
 
-    # Strategy selection
+    # Strategy selection - compact
     strategy_names = list(strategies.keys())
-    strategy_descriptions = [strategies[name]['description'] for name in strategy_names]
-
     selected_strategy_name = st.selectbox(
-        "Select Strategy",
+        "Strategy",
         strategy_names,
-        format_func=lambda x: f"{x} - {strategies[x]['description'][:80]}..."
+        format_func=lambda x: f"{x} - {strategies[x]['description'][:60]}...",
+        label_visibility="collapsed"
     )
 
     selected_strategy = strategies[selected_strategy_name]
 
-    # Show strategy documentation
-    with st.expander("📖 Strategy Documentation"):
-        st.markdown(f"**Module:** `strategies.{selected_strategy['module']}`")
-        st.markdown(f"**Function:** `{selected_strategy_name}`")
+    # Show strategy documentation - compact
+    with st.expander("📖 Docs", expanded=False):
+        st.caption(f"**Module:** `strategies.{selected_strategy['module']}` | **Function:** `{selected_strategy_name}`")
         if selected_strategy['docstring']:
             st.code(selected_strategy['docstring'], language='text')
 
-    # Extract and render parameters
-    st.subheader("⚙️ Strategy Parameters")
+    # Extract and render parameters - compact
+    st.write("")  # Small spacer
+    st.caption("**⚙️ Parameters**")
 
     strategy_func = selected_strategy['function']
     params_spec = extract_strategy_params(strategy_func)
 
     if not params_spec:
-        st.info("This strategy has no configurable parameters or parameters could not be auto-detected.")
+        st.info("No configurable parameters")
         strategy_params = {}
     else:
         strategy_params = {}
@@ -613,58 +580,36 @@ def render_strategy_sheet():
         float_params = {k: v for k, v in params_spec.items() if v['type'] == 'float'}
         bool_params = {k: v for k, v in params_spec.items() if v['type'] == 'bool'}
 
-        # Render integer parameters
-        if int_params:
-            st.markdown("**Integer Parameters**")
-            cols = st.columns(min(3, len(int_params)))
-            for idx, (param_name, param_info) in enumerate(int_params.items()):
-                with cols[idx % 3]:
-                    strategy_params[param_name] = st.number_input(
-                        param_name.replace('_', ' ').title(),
-                        value=param_info['default'] if param_info['default'] is not None else 20,
-                        min_value=1,
-                        step=1,
-                        help=param_info['description']
-                    )
+        # Render all parameters in compact grid
+        all_params = list(int_params.items()) + list(float_params.items()) + list(bool_params.items())
 
-        # Render float parameters
-        if float_params:
-            st.markdown("**Float Parameters**")
-            cols = st.columns(min(3, len(float_params)))
-            for idx, (param_name, param_info) in enumerate(float_params.items()):
-                with cols[idx % 3]:
-                    strategy_params[param_name] = st.number_input(
-                        param_name.replace('_', ' ').title(),
-                        value=param_info['default'] if param_info['default'] is not None else 0.1,
-                        min_value=0.0,
-                        step=0.001,
-                        format="%.4f",
-                        help=param_info['description']
-                    )
+        if all_params:
+            cols = st.columns(4)  # 4-column grid
+            for idx, (param_name, param_info) in enumerate(all_params):
+                with cols[idx % 4]:
+                    if param_info['type'] == 'int':
+                        strategy_params[param_name] = st.number_input(
+                            param_name.replace('_', ' ').title(),
+                            value=param_info['default'] if param_info['default'] is not None else 20,
+                            min_value=1, step=1
+                        )
+                    elif param_info['type'] == 'float':
+                        strategy_params[param_name] = st.number_input(
+                            param_name.replace('_', ' ').title(),
+                            value=param_info['default'] if param_info['default'] is not None else 0.1,
+                            min_value=0.0, step=0.01, format="%.3f"
+                        )
+                    elif param_info['type'] == 'bool':
+                        strategy_params[param_name] = st.checkbox(
+                            param_name.replace('_', ' ').title(),
+                            value=param_info['default'] if param_info['default'] is not None else False
+                        )
 
-        # Render boolean parameters
-        if bool_params:
-            st.markdown("**Boolean Parameters**")
-            cols = st.columns(min(3, len(bool_params)))
-            for idx, (param_name, param_info) in enumerate(bool_params.items()):
-                with cols[idx % 3]:
-                    strategy_params[param_name] = st.checkbox(
-                        param_name.replace('_', ' ').title(),
-                        value=param_info['default'] if param_info['default'] is not None else False,
-                        help=param_info['description']
-                    )
-
-    # Run Backtest Button
-    st.divider()
-
-    col1, col2, col3 = st.columns([1, 1, 1])
+    # Run Backtest Button - compact
+    st.write("")
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 2])
     with col2:
-        run_button = st.button(
-            "Run Backtest",
-            type="primary",
-            use_container_width=True,
-            help="Execute backtest with selected strategy and configuration"
-        )
+        run_button = st.button("🚀 Run Backtest", type="primary", use_container_width=True)
 
     if run_button:
         # Store strategy selection
@@ -842,7 +787,7 @@ def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatma
 
 def render_results_sheet():
     """Sheet 3: Results and Analysis"""
-    st.header("📊 Backtest Results")
+    st.subheader("📊 Backtest Results")
 
     if 'backtest_result' not in st.session_state:
         st.info("No backtest results yet. Please run a backtest first in the 'Strategy' tab.")
@@ -854,8 +799,9 @@ def render_results_sheet():
     # Create performance report
     report = PerformanceReport(result, initial_capital=config.initial_capital)
 
-    # Summary Section
-    st.subheader("📈 Performance Summary")
+    # Summary Section - compact
+    st.write("")  # Small spacer
+    st.caption("**📈 Performance Summary**")
 
     metrics_df = report.get_metrics_dataframe(transpose=True)
     strategy_metrics = metrics_df['Strategy']
@@ -901,10 +847,9 @@ def render_results_sheet():
         win_rate = strategy_metrics.get('win_rate', 0)
         st.metric("Win Rate", f"{win_rate:.1%}")
 
-    st.divider()
-
-    # Charts Section
-    st.subheader("📈 Performance Charts")
+    # Charts Section - compact
+    st.write("")  # Small spacer
+    st.caption("**📈 Performance Charts**")
 
     # Generate all charts from report
     try:
@@ -923,26 +868,24 @@ def render_results_sheet():
     except Exception as e:
         st.warning(f"Could not generate some charts: {str(e)}")
 
-    st.divider()
+    # Monthly Heatmap Comparison Section - compact
+    st.write("")  # Small spacer
+    st.caption("**📅 Monthly Heatmap Comparison**")
 
-    # Monthly Heatmap Comparison Section
-    st.subheader("📅 Monthly Performance Heatmap Comparison")
-
-    # Metric selector
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        selected_metric = st.selectbox(
-            "Select Metric",
-            options=['returns', 'sharpe_ratio', 'pnl', 'drawdown', 'volatility'],
-            format_func=lambda x: {
-                'returns': 'Returns (%)',
-                'sharpe_ratio': 'Sharpe Ratio',
-                'pnl': 'Profit/Loss ($)',
-                'drawdown': 'Drawdown (%)',
-                'volatility': 'Volatility (%)'
-            }[x],
-            key='heatmap_metric_selector'
-        )
+    # Metric selector - compact
+    selected_metric = st.selectbox(
+        "Metric",
+        options=['returns', 'sharpe_ratio', 'pnl', 'drawdown', 'volatility'],
+        format_func=lambda x: {
+            'returns': 'Returns (%)',
+            'sharpe_ratio': 'Sharpe Ratio',
+            'pnl': 'Profit/Loss ($)',
+            'drawdown': 'Drawdown (%)',
+            'volatility': 'Volatility (%)'
+        }[x],
+        key='heatmap_metric_selector',
+        label_visibility="collapsed"
+    )
 
     # Get benchmark data if available
     try:
@@ -951,11 +894,11 @@ def render_results_sheet():
     except:
         has_benchmark = False
 
-    # Create heatmaps
+    # Create heatmaps - compact
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("**Strategy Performance**")
+        st.caption("**Strategy**")
         try:
             strategy_heatmap = create_monthly_heatmap(
                 result.equity_curve,
@@ -970,7 +913,7 @@ def render_results_sheet():
             st.error(f"Could not generate strategy heatmap: {str(e)}")
 
     with col2:
-        st.markdown("**Benchmark Performance (SPY Buy & Hold)**")
+        st.caption("**Benchmark (SPY)**")
         try:
             # Load SPY benchmark data from Yahoo Finance (cached)
             benchmark_df, error_msg = load_spy_benchmark_data_from_backtest(
@@ -995,10 +938,9 @@ def render_results_sheet():
         except Exception as e:
             st.warning(f"Could not generate benchmark heatmap: {str(e)}")
 
-    st.divider()
-
-    # Per-Symbol Analysis
-    st.subheader("🎯 Per-Symbol Performance")
+    # Per-Symbol Analysis - compact
+    st.write("")  # Small spacer
+    st.caption("**🎯 Per-Symbol Performance**")
 
     per_symbol_df = report.get_per_symbol_metrics_dataframe(transpose=True)
     if per_symbol_df is not None and not per_symbol_df.empty:
@@ -1039,24 +981,17 @@ def render_results_sheet():
             except Exception as e:
                 st.info(f"Correlation heatmap not available: {str(e)}")
 
-    st.divider()
-
-    # Full Metrics Table
-    with st.expander("📊 Detailed Metrics"):
+    # Full Metrics Table - compact
+    with st.expander("📊 Detailed Metrics", expanded=False):
         st.dataframe(metrics_df, use_container_width=True)
 
-    # Trade History (Detailed)
-    with st.expander("💼 Detailed Trade History", expanded=False):
+    # Trade History (Detailed) - compact
+    with st.expander("💼 Trade History", expanded=False):
         if not result.trades.empty:
             trades_df = result.trades.copy()
 
-            # Add helpful info
-            st.markdown(f"""
-            **Total Fills: {len(trades_df)}** (each buy/sell is counted as one fill)
-
-            Note: A complete round-trip trade (open + close) = 2 fills.
-            High fill count may indicate frequent rebalancing or position adjustments.
-            """)
+            # Add helpful info - compact
+            st.caption(f"**Total Fills:** {len(trades_df)} (each buy/sell = 1 fill)")
 
             # Trade statistics
             col1, col2, col3, col4 = st.columns(4)
@@ -1073,10 +1008,8 @@ def render_results_sheet():
                 avg_size = trades_df['value'].mean()
                 st.metric("Avg Fill Size", f"${avg_size:,.0f}")
 
-            st.divider()
-
-            # Per-symbol breakdown
-            st.markdown("**Fills by Symbol:**")
+            # Per-symbol breakdown - compact
+            st.caption("**Fills by Symbol:**")
             symbol_trades = trades_df.groupby('symbol').agg({
                 'quantity': 'sum',
                 'value': 'sum',
@@ -1086,10 +1019,8 @@ def render_results_sheet():
             symbol_trades = symbol_trades.sort_values('num_fills', ascending=False)
             st.dataframe(symbol_trades, use_container_width=True)
 
-            st.divider()
-
-            # Full trade log
-            st.markdown("**Full Trade Log:**")
+            # Full trade log - compact
+            st.caption("**Full Trade Log:**")
 
             # Prepare display dataframe
             display_df = trades_df.reset_index()
@@ -1132,23 +1063,395 @@ def render_results_sheet():
             st.info("No trades executed")
 
 
+
+
+# ==== CPCV Validation Functions ====
+
+def render_cpcv_validation_sheet():
+    """Sheet 4: CPCV Validation - Professional Strategy Validation"""
+    st.subheader("🔬 CPCV Validation")
+    st.caption("**Combinatorial Purged Cross-Validation** - Detect overfitting and validate strategy robustness")
+
+    if 'config' not in st.session_state or 'selected_strategy_name' not in st.session_state:
+        st.warning("Please configure backtest parameters and select a strategy first.")
+        st.info("👈 Go to 'Configuration' and 'Strategy' tabs to set up your backtest.")
+        return
+
+    # CPCV Mode Selection
+    st.write("")
+    mode = st.radio(
+        "Validation Mode",
+        ["Single Strategy Validation", "Parameter Grid Optimization", "Strategy Comparison"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+
+    st.write("")  # Spacer
+
+    if mode == "Single Strategy Validation":
+        render_single_strategy_cpcv()
+    elif mode == "Parameter Grid Optimization":
+        render_parameter_optimization_cpcv()
+    else:
+        render_strategy_comparison_cpcv()
+
+
+def render_single_strategy_cpcv():
+    """Validate a single strategy with CPCV"""
+    st.caption("**Single Strategy Validation**")
+    st.write("Validate one strategy configuration across multiple train/test paths to detect overfitting.")
+
+    # CPCV Configuration
+    st.write("")
+    st.caption("**CPCV Settings**")
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        n_splits = st.number_input("Number of Folds", value=10, min_value=3, max_value=20, step=1)
+    with col2:
+        n_test_splits = st.number_input("Test Folds per Path", value=2, min_value=1, max_value=5, step=1)
+    with col3:
+        purge_pct = st.number_input("Purge %", value=5.0, min_value=0.0, max_value=20.0, step=1.0) / 100
+    with col4:
+        embargo_pct = st.number_input("Embargo %", value=2.0, min_value=0.0, max_value=10.0, step=1.0) / 100
+
+    # Calculate number of paths
+    import math
+    n_paths = math.comb(n_splits, n_test_splits)
+    st.caption(f"This will generate **{n_paths} validation paths** (C({n_splits},{n_test_splits}))")
+
+    # Run Button
+    st.write("")
+    col1, col2, col3 = st.columns([2, 1, 2])
+    with col2:
+        run_validation = st.button("🚀 Run CPCV Validation", type="primary", use_container_width=True)
+
+    if run_validation:
+        with st.spinner(f"Running CPCV validation across {n_paths} paths... This may take a few minutes."):
+            # Get configuration from session
+            config_dict = st.session_state.config
+            strategy_name = st.session_state.selected_strategy_name
+            strategy_params = st.session_state.get('strategy_params', {})
+
+            # Convert config dict to BacktestConfig object
+            from backt.utils.config import ExecutionConfig
+
+            execution_config = ExecutionConfig(
+                spread=config_dict.get('spread', 0.0),
+                slippage_pct=config_dict.get('slippage_pct', 0.0),
+                commission_per_share=config_dict.get('commission_per_share', 0.0)
+            )
+
+            config = BacktestConfig(
+                start_date=config_dict['start_date'].strftime('%Y-%m-%d'),
+                end_date=config_dict['end_date'].strftime('%Y-%m-%d'),
+                initial_capital=config_dict['initial_capital'],
+                allow_short=config_dict.get('allow_short', False),
+                max_leverage=config_dict.get('max_leverage', 1.0),
+                max_position_size=config_dict.get('max_position_size', None),
+                use_mock_data=config_dict.get('use_mock_data', False),
+                execution=execution_config,
+                verbose=False
+            )
+
+            symbols = config_dict.get('symbols', ['SPY'])
+
+            # Get strategy function
+            strategies = get_available_strategies()
+            strategy_func = strategies[strategy_name]['function']
+
+            # Create CPCV config
+            cpcv_config = CPCVConfig(
+                n_splits=n_splits,
+                n_test_splits=n_test_splits,
+                purge_pct=purge_pct,
+                embargo_pct=embargo_pct
+            )
+
+            # Run CPCV validation
+            try:
+                validator = CPCVValidator(config, cpcv_config)
+                result = validator.validate(
+                    strategy=strategy_func,
+                    symbols=symbols,
+                    strategy_params=strategy_params
+                )
+
+                # Store result in session
+                st.session_state.cpcv_result = result
+
+                st.success(f"Validation complete! Ran {result.n_paths} paths in {result.total_runtime_seconds:.1f}s")
+
+            except Exception as e:
+                st.error(f"CPCV validation failed: {str(e)}")
+                st.exception(e)
+                return
+
+    # Display results if available
+    if 'cpcv_result' in st.session_state:
+        display_cpcv_results(st.session_state.cpcv_result)
+
+
+def display_cpcv_results(result):
+    """Display comprehensive CPCV validation results"""
+    st.write("")
+    st.caption("**📊 Validation Results**")
+
+    # Summary Metrics
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("Paths Completed", f"{result.n_paths}")
+    with col2:
+        st.metric("Mean Sharpe", f"{result.mean_sharpe:.3f}")
+    with col3:
+        st.metric("Std Sharpe", f"{result.std_sharpe:.3f}")
+    with col4:
+        st.metric("Mean Return", f"{result.mean_return:.1%}")
+    with col5:
+        st.metric("Mean Max DD", f"{result.mean_max_drawdown:.1%}")
+
+    st.write("")
+
+    # Overfitting Metrics - Highlight Box
+    st.caption("**🎯 Overfitting Detection Metrics**")
+
+    metrics = result.overfitting_metrics
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        pbo_color = "green" if metrics.pbo < 0.3 else ("orange" if metrics.pbo < 0.5 else "red")
+        st.markdown(f"""
+        <div style='background-color: rgba(0,255,0,0.1) if '{pbo_color}' == 'green' else rgba(255,165,0,0.1) if '{pbo_color}' == 'orange' else rgba(255,0,0,0.1);
+                    padding: 0.8rem; border-radius: 0.5rem; border-left: 4px solid {pbo_color};'>
+            <p style='margin: 0; font-size: 0.75rem; color: #666;'>PBO</p>
+            <p style='margin: 0; font-size: 1.5rem; font-weight: bold;'>{metrics.pbo:.1%}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        dsr_color = "green" if metrics.dsr > 2.0 else ("orange" if metrics.dsr > 1.0 else "red")
+        st.markdown(f"""
+        <div style='background-color: rgba(0,255,0,0.1) if '{dsr_color}' == 'green' else rgba(255,165,0,0.1) if '{dsr_color}' == 'orange' else rgba(255,0,0,0.1);
+                    padding: 0.8rem; border-radius: 0.5rem; border-left: 4px solid {dsr_color};'>
+            <p style='margin: 0; font-size: 0.75rem; color: #666;'>DSR</p>
+            <p style='margin: 0; font-size: 1.5rem; font-weight: bold;'>{metrics.dsr:.2f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        deg_color = "green" if abs(metrics.degradation_pct) < 10 else ("orange" if abs(metrics.degradation_pct) < 20 else "red")
+        st.markdown(f"""
+        <div style='background-color: rgba(0,255,0,0.1) if '{deg_color}' == 'green' else rgba(255,165,0,0.1) if '{deg_color}' == 'orange' else rgba(255,0,0,0.1);
+                    padding: 0.8rem; border-radius: 0.5rem; border-left: 4px solid {deg_color};'>
+            <p style='margin: 0; font-size: 0.75rem; color: #666;'>Degradation</p>
+            <p style='margin: 0; font-size: 1.5rem; font-weight: bold;'>{metrics.degradation_pct:.1f}%</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        stab_color = "green" if metrics.sharpe_stability > 5.0 else ("orange" if metrics.sharpe_stability > 2.0 else "red")
+        st.markdown(f"""
+        <div style='background-color: rgba(0,255,0,0.1) if '{stab_color}' == 'green' else rgba(255,165,0,0.1) if '{stab_color}' == 'orange' else rgba(255,0,0,0.1);
+                    padding: 0.8rem; border-radius: 0.5rem; border-left: 4px solid {stab_color};'>
+            <p style='margin: 0; font-size: 0.75rem; color: #666;'>Stability</p>
+            <p style='margin: 0; font-size: 1.5rem; font-weight: bold;'>{metrics.sharpe_stability:.2f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Interpretations
+    st.write("")
+    with st.expander("📖 Metric Interpretations", expanded=True):
+        for metric, interpretation in result.overfitting_interpretations.items():
+            st.write(f"• **{metric.upper()}:** {interpretation}")
+
+    # Validation Status
+    st.write("")
+    if result.passes_validation():
+        st.success("✅ **Strategy PASSES validation criteria**")
+    else:
+        st.error("❌ **Strategy FAILS validation criteria**")
+        if result.validation_warnings:
+            for warning in result.validation_warnings:
+                st.warning(f"⚠️ {warning}")
+
+    # Visualization Section
+    st.write("")
+    st.caption("**📈 Validation Path Analysis**")
+
+    # Create path distribution chart
+    fig = create_path_distribution_chart(result)
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Performance distribution
+    col1, col2 = st.columns(2)
+    with col1:
+        fig_dist = create_sharpe_distribution_chart(result)
+        st.plotly_chart(fig_dist, use_container_width=True)
+
+    with col2:
+        fig_scatter = create_path_scatter_chart(result)
+        st.plotly_chart(fig_scatter, use_container_width=True)
+
+    # Detailed path results table
+    st.write("")
+    with st.expander("🔍 Detailed Path Results", expanded=False):
+        path_data = []
+        for path in result.path_results:
+            path_data.append({
+                'Path ID': path.path_id,
+                'Test Folds': str(path.test_fold_indices),
+                'Sharpe Ratio': f"{path.sharpe_ratio:.3f}",
+                'Return': f"{path.total_return:.2%}",
+                'Max Drawdown': f"{path.max_drawdown:.2%}"
+            })
+
+        path_df = pd.DataFrame(path_data)
+        st.dataframe(path_df, use_container_width=True, hide_index=True)
+
+
+def create_path_distribution_chart(result):
+    """Create chart showing Sharpe ratio across all validation paths"""
+    sharpe_values = [p.sharpe_ratio for p in result.path_results]
+    path_ids = [p.path_id for p in result.path_results]
+
+    fig = go.Figure()
+
+    # Bar chart of Sharpe ratios
+    fig.add_trace(go.Bar(
+        x=path_ids,
+        y=sharpe_values,
+        name='Sharpe Ratio',
+        marker=dict(
+            color=sharpe_values,
+            colorscale='RdYlGn',
+            cmin=-2,
+            cmax=2,
+            colorbar=dict(title="Sharpe")
+        )
+    ))
+
+    # Add mean line
+    fig.add_hline(
+        y=result.mean_sharpe,
+        line_dash="dash",
+        line_color="blue",
+        annotation_text=f"Mean: {result.mean_sharpe:.3f}"
+    )
+
+    fig.update_layout(
+        title="Sharpe Ratio Across All Validation Paths",
+        xaxis_title="Path ID",
+        yaxis_title="Sharpe Ratio",
+        height=350,
+        hovermode='x',
+        showlegend=False
+    )
+
+    return fig
+
+
+def create_sharpe_distribution_chart(result):
+    """Create histogram of Sharpe ratio distribution"""
+    sharpe_values = [p.sharpe_ratio for p in result.path_results]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Histogram(
+        x=sharpe_values,
+        nbinsx=20,
+        name='Distribution',
+        marker=dict(color='steelblue')
+    ))
+
+    # Add mean line
+    fig.add_vline(
+        x=result.mean_sharpe,
+        line_dash="dash",
+        line_color="red",
+        annotation_text=f"Mean: {result.mean_sharpe:.3f}"
+    )
+
+    fig.update_layout(
+        title="Sharpe Ratio Distribution",
+        xaxis_title="Sharpe Ratio",
+        yaxis_title="Frequency",
+        height=300,
+        showlegend=False
+    )
+
+    return fig
+
+
+def create_path_scatter_chart(result):
+    """Create scatter plot of Return vs Drawdown"""
+    returns = [p.total_return * 100 for p in result.path_results]
+    drawdowns = [abs(p.max_drawdown * 100) for p in result.path_results]
+    sharpe = [p.sharpe_ratio for p in result.path_results]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=drawdowns,
+        y=returns,
+        mode='markers',
+        marker=dict(
+            size=10,
+            color=sharpe,
+            colorscale='RdYlGn',
+            showscale=True,
+            colorbar=dict(title="Sharpe"),
+            cmin=-2,
+            cmax=2
+        ),
+        text=[f"Path {p.path_id}" for p in result.path_results],
+        hovertemplate='<b>%{text}</b><br>Return: %{y:.1f}%<br>Max DD: %{x:.1f}%'
+    ))
+
+    fig.update_layout(
+        title="Return vs Max Drawdown (colored by Sharpe)",
+        xaxis_title="Max Drawdown (%)",
+        yaxis_title="Total Return (%)",
+        height=300
+    )
+
+    return fig
+
+
+def render_parameter_optimization_cpcv():
+    """Parameter grid optimization with CPCV validation"""
+    st.caption("**Parameter Grid Optimization**")
+    st.write("Test multiple parameter combinations and validate each with CPCV.")
+
+    st.info("🚧 Feature coming soon! This will allow you to optimize parameters using CPCV validation.")
+    st.write("**Planned features:**")
+    st.write("• Define parameter grids (e.g., lookback: 10-50, threshold: 0-0.05)")
+    st.write("• Run CPCV on each combination")
+    st.write("• Compare PBO/DSR across parameters")
+    st.write("• Find robust parameter sets")
+
+
+def render_strategy_comparison_cpcv():
+    """Compare multiple strategies with CPCV"""
+    st.caption("**Strategy Comparison**")
+    st.write("Compare different strategies using CPCV validation.")
+
+    st.info("🚧 Feature coming soon! This will allow you to compare multiple strategies.")
+    st.write("**Planned features:**")
+    st.write("• Select multiple strategies to compare")
+    st.write("• Run CPCV on each strategy")
+    st.write("• Side-by-side comparison of PBO, DSR, Sharpe")
+    st.write("• Identify which strategy is most robust")
+
+
 def main():
     """Main application"""
 
-    # Header
-    st.title("BackT | Quantitative Backtesting Platform")
-    st.markdown(
-        '<p style="font-size: 0.9rem; color: #6c757d; margin-top: -1rem; margin-bottom: 1.5rem;">'
-        'Professional multi-strategy backtesting with advanced analytics and risk management'
-        '</p>',
-        unsafe_allow_html=True
-    )
-
     # Create tabs
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "⚙️ Configuration",
         "📈 Strategy",
-        "📊 Results"
+        "📊 Results",
+        "🔬 CPCV Validation"
     ])
 
     with tab1:
@@ -1160,20 +1463,21 @@ def main():
     with tab3:
         render_results_sheet()
 
-    # Sidebar - Status
+    with tab4:
+        render_cpcv_validation_sheet()
+
+    # Sidebar - Status - compact
     with st.sidebar:
-        # Logo/Header
+        # Logo/Header - compact
         st.markdown(
-            '<div style="text-align: center; padding: 1rem 0 0.5rem 0;">'
-            '<h2 style="margin: 0; color: #1f77b4; font-size: 1.4rem;">BackT</h2>'
-            '<p style="margin: 0; font-size: 0.7rem; color: #6c757d;">Professional Backtesting</p>'
+            '<div style="text-align: center; padding: 0.5rem 0 0.3rem 0;">'
+            '<h2 style="margin: 0; color: #1f77b4; font-size: 1.2rem;">BackT</h2>'
+            '<p style="margin: 0; font-size: 0.65rem; color: #6c757d;">Professional Backtesting</p>'
             '</div>',
             unsafe_allow_html=True
         )
 
-        st.divider()
-
-        st.markdown("### Session Status")
+        st.caption("**Session Status**")
 
         # Configuration status
         if 'config' in st.session_state:
@@ -1239,15 +1543,12 @@ def main():
                 unsafe_allow_html=True
             )
 
-        st.divider()
-
-        # Reset button - smaller, cleaner
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            if st.button("Reset", use_container_width=True, help="Clear all session data"):
-                for key in list(st.session_state.keys()):
-                    del st.session_state[key]
-                st.rerun()
+        # Reset button - compact
+        st.write("")
+        if st.button("🔄 Reset Session", use_container_width=True, help="Clear all session data"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
 
 
 if __name__ == "__main__":
