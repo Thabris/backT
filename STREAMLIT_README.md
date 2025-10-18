@@ -93,10 +93,19 @@ Use the **Reset Session** button to start over.
 The app automatically discovers strategies from the `strategies/` module:
 
 **Currently Available:**
+
+**Trend Following:**
 - `ma_crossover_long_only` - Traditional MA crossover (long only)
 - `ma_crossover_long_short` - Traditional MA crossover (long-short)
-- `kalman_ma_crossover_long_only` - Kalman-enhanced (long only)
-- `kalman_ma_crossover_long_short` - Kalman-enhanced (long-short)
+- `kalman_ma_crossover_long_only` - Kalman-enhanced MA (long only)
+- `kalman_ma_crossover_long_short` - Kalman-enhanced MA (long-short)
+- `macd_crossover` - MACD trend following (long-only or long-short)
+- `adx_trend_filter` - ADX trend strength filter with directional trading
+
+**Mean Reversion:**
+- `rsi_mean_reversion` - RSI overbought/oversold (long only)
+- `bollinger_mean_reversion` - Bollinger Bands mean reversion (long only)
+- `stochastic_momentum` - Stochastic oscillator momentum (long only)
 
 **Adding New Strategies:**
 1. Create strategy function in `strategies/` folder
