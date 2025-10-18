@@ -41,21 +41,173 @@ st.set_page_config(
 )
 
 
-# Custom CSS
+# Custom CSS - Professional styling
 st.markdown("""
 <style>
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
+    /* Main theme colors */
+    :root {
+        --primary-color: #1f77b4;
+        --secondary-color: #ff7f0e;
+        --success-color: #2ca02c;
+        --warning-color: #d62728;
+        --bg-light: #f8f9fa;
+        --bg-dark: #2c3e50;
+        --text-muted: #6c757d;
     }
+
+    /* Reduce overall padding */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    /* Header styling */
+    h1 {
+        font-size: 2rem !important;
+        font-weight: 600 !important;
+        color: #1f77b4 !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    h2 {
+        font-size: 1.3rem !important;
+        font-weight: 500 !important;
+        margin-top: 1rem !important;
+        margin-bottom: 0.8rem !important;
+    }
+
+    h3 {
+        font-size: 1.1rem !important;
+        font-weight: 500 !important;
+        margin-top: 0.8rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    /* Compact tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
+        gap: 8px;
+        background-color: #f8f9fa;
+        padding: 0.5rem;
+        border-radius: 8px;
     }
+
     .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        padding: 0 24px;
+        height: 40px !important;
+        padding: 0 16px !important;
+        font-size: 0.9rem !important;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+    }
+
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: #e9ecef;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background-color: #1f77b4 !important;
+        color: white !important;
+    }
+
+    /* Compact buttons */
+    .stButton > button {
+        font-size: 0.85rem !important;
+        padding: 0.4rem 1rem !important;
+        border-radius: 6px !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease !important;
+    }
+
+    .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    /* Primary button styling */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #1f77b4 0%, #1557a0 100%) !important;
+        box-shadow: 0 2px 8px rgba(31,119,180,0.3);
+    }
+
+    /* Metric cards - more professional */
+    [data-testid="stMetricValue"] {
+        font-size: 1.8rem !important;
+        font-weight: 600 !important;
+    }
+
+    [data-testid="stMetricLabel"] {
+        font-size: 0.85rem !important;
+        color: #6c757d !important;
+        font-weight: 500 !important;
+    }
+
+    [data-testid="stMetricDelta"] {
+        font-size: 0.8rem !important;
+    }
+
+    /* Compact forms */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSelectbox > div > div,
+    .stDateInput > div > div > input {
+        font-size: 0.85rem !important;
+        padding: 0.4rem 0.6rem !important;
+    }
+
+    /* Labels - smaller and muted */
+    label {
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        color: #495057 !important;
+    }
+
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+    }
+
+    [data-testid="stSidebar"] h2 {
+        font-size: 1.1rem !important;
+        color: #2c3e50 !important;
+    }
+
+    /* Caption text - smaller */
+    .stCaption {
+        font-size: 0.75rem !important;
+        color: #6c757d !important;
+    }
+
+    /* Compact expanders */
+    .streamlit-expanderHeader {
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        padding: 0.5rem 1rem !important;
+    }
+
+    /* Success/Warning/Error messages - compact */
+    .stSuccess, .stWarning, .stError, .stInfo {
+        padding: 0.5rem 1rem !important;
+        font-size: 0.85rem !important;
+    }
+
+    /* Divider - subtle */
+    hr {
+        margin: 1rem 0 !important;
+        border-color: #e9ecef !important;
+    }
+
+    /* Dataframe styling */
+    .dataframe {
+        font-size: 0.8rem !important;
+    }
+
+    /* Remove extra spacing */
+    .element-container {
+        margin-bottom: 0.5rem !important;
+    }
+
+    /* Compact columns */
+    [data-testid="column"] {
+        padding: 0 0.5rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -385,7 +537,12 @@ def render_configuration_sheet():
         st.subheader("📊 Data Settings")
         use_mock_data = st.checkbox("Use Mock Data (for testing)", value=False)
 
-        submitted = st.form_submit_button("✅ Save Configuration", type="primary", use_container_width=True)
+        st.divider()
+
+        # Compact save button
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            submitted = st.form_submit_button("Save Configuration", type="primary", use_container_width=True)
 
         if submitted:
             # Store in session state
@@ -500,12 +657,13 @@ def render_strategy_sheet():
     # Run Backtest Button
     st.divider()
 
-    col1, col2, col3 = st.columns([2, 1, 2])
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         run_button = st.button(
-            "🚀 Run Backtest",
+            "Run Backtest",
             type="primary",
-            use_container_width=True
+            use_container_width=True,
+            help="Execute backtest with selected strategy and configuration"
         )
 
     if run_button:
@@ -978,8 +1136,13 @@ def main():
     """Main application"""
 
     # Header
-    st.title("🚀 BackT Backtest Runner")
-    st.markdown("Professional multi-strategy backtesting platform")
+    st.title("BackT | Quantitative Backtesting Platform")
+    st.markdown(
+        '<p style="font-size: 0.9rem; color: #6c757d; margin-top: -1rem; margin-bottom: 1.5rem;">'
+        'Professional multi-strategy backtesting with advanced analytics and risk management'
+        '</p>',
+        unsafe_allow_html=True
+    )
 
     # Create tabs
     tab1, tab2, tab3 = st.tabs([
@@ -999,40 +1162,92 @@ def main():
 
     # Sidebar - Status
     with st.sidebar:
-        st.header("📋 Session Status")
+        # Logo/Header
+        st.markdown(
+            '<div style="text-align: center; padding: 1rem 0 0.5rem 0;">'
+            '<h2 style="margin: 0; color: #1f77b4; font-size: 1.4rem;">BackT</h2>'
+            '<p style="margin: 0; font-size: 0.7rem; color: #6c757d;">Professional Backtesting</p>'
+            '</div>',
+            unsafe_allow_html=True
+        )
 
+        st.divider()
+
+        st.markdown("### Session Status")
+
+        # Configuration status
         if 'config' in st.session_state:
-            st.success("✅ Configuration Set")
             config = st.session_state.config
-            st.caption(f"Period: {config['start_date']} to {config['end_date']}")
-            st.caption(f"Capital: ${config['initial_capital']:,}")
-            st.caption(f"Universe: {len(config['symbols'])} symbols")
+            st.markdown(
+                '<div style="background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); '
+                'padding: 0.6rem; border-radius: 6px; margin-bottom: 0.5rem;">'
+                '<div style="font-size: 0.75rem; font-weight: 600; color: #155724;">✓ Configuration</div>'
+                f'<div style="font-size: 0.7rem; color: #155724; margin-top: 0.2rem;">{config["start_date"]} → {config["end_date"]}</div>'
+                f'<div style="font-size: 0.7rem; color: #155724;">${config["initial_capital"]:,.0f} | {len(config["symbols"])} symbols</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
         else:
-            st.warning("⚠️ No Configuration")
+            st.markdown(
+                '<div style="background: #fff3cd; padding: 0.6rem; border-radius: 6px; margin-bottom: 0.5rem;">'
+                '<div style="font-size: 0.75rem; font-weight: 600; color: #856404;">⚠ No Configuration</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
 
+        # Strategy status
         if 'selected_strategy_name' in st.session_state:
-            st.success(f"✅ Strategy: {st.session_state.selected_strategy_name}")
+            st.markdown(
+                '<div style="background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); '
+                'padding: 0.6rem; border-radius: 6px; margin-bottom: 0.5rem;">'
+                '<div style="font-size: 0.75rem; font-weight: 600; color: #155724;">✓ Strategy</div>'
+                f'<div style="font-size: 0.7rem; color: #155724; margin-top: 0.2rem;">{st.session_state.selected_strategy_name}</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
         else:
-            st.warning("⚠️ No Strategy Selected")
+            st.markdown(
+                '<div style="background: #fff3cd; padding: 0.6rem; border-radius: 6px; margin-bottom: 0.5rem;">'
+                '<div style="font-size: 0.75rem; font-weight: 600; color: #856404;">⚠ No Strategy</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
 
+        # Results status
         if 'backtest_result' in st.session_state:
-            st.success("✅ Backtest Complete")
             result = st.session_state.backtest_result
             final_value = result.equity_curve['total_equity'].iloc[-1]
             initial_value = result.equity_curve['total_equity'].iloc[0]
             total_return = (final_value / initial_value - 1) * 100
-            st.caption(f"Return: {total_return:.2f}%")
-            st.caption(f"Trades: {len(result.trades)}")
+            return_color = '#155724' if total_return >= 0 else '#721c24'
+            bg_color = 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)' if total_return >= 0 else 'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)'
+
+            st.markdown(
+                f'<div style="background: {bg_color}; '
+                'padding: 0.6rem; border-radius: 6px; margin-bottom: 0.5rem;">'
+                f'<div style="font-size: 0.75rem; font-weight: 600; color: {return_color};">✓ Results</div>'
+                f'<div style="font-size: 0.7rem; color: {return_color}; margin-top: 0.2rem;">Return: {total_return:+.2f}%</div>'
+                f'<div style="font-size: 0.7rem; color: {return_color};">{len(result.trades)} fills executed</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
         else:
-            st.warning("⚠️ No Results")
+            st.markdown(
+                '<div style="background: #fff3cd; padding: 0.6rem; border-radius: 6px; margin-bottom: 0.5rem;">'
+                '<div style="font-size: 0.75rem; font-weight: 600; color: #856404;">⚠ No Results</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
 
         st.divider()
 
-        # Reset button
-        if st.button("🔄 Reset Session", use_container_width=True):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
+        # Reset button - smaller, cleaner
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("Reset", use_container_width=True, help="Clear all session data"):
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.rerun()
 
 
 if __name__ == "__main__":
