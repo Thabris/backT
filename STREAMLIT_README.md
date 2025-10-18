@@ -107,6 +107,14 @@ The app automatically discovers strategies from the `strategies/` module:
 - `bollinger_mean_reversion` - Bollinger Bands mean reversion (long only)
 - `stochastic_momentum` - Stochastic oscillator momentum (long only)
 
+**AQR Capital Management Strategies (Factor-Based):**
+- `quality_minus_junk` - Long high-quality, short junk stocks (QMJ factor)
+- `quality_long_only` - Long-only quality stocks
+- `value_everywhere` - Multi-metric value strategy (B/P, E/P, CF/P)
+- `betting_against_beta` - Long low-beta, short high-beta stocks
+- `defensive_equity` - Long-only low-beta defensive stocks
+- `quality_value_momentum` - Combined 3-factor strategy (AQR's "New Core")
+
 **Adding New Strategies:**
 1. Create strategy function in `strategies/` folder
 2. Follow standard BackT signature
