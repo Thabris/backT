@@ -115,6 +115,8 @@ The app automatically discovers strategies from the `strategies/` module:
 - `defensive_equity` - Long-only low-beta defensive stocks
 - `quality_value_momentum` - Combined 3-factor strategy (AQR's "New Core")
 
+**Note:** AQR strategies require fundamental data. They work with yfinance (free) or FinancialModelingPrep API (recommended for better data quality). See `FMP_SETUP.md` for API setup instructions.
+
 **Adding New Strategies:**
 1. Create strategy function in `strategies/` folder
 2. Follow standard BackT signature
