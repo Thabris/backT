@@ -70,7 +70,8 @@ class Backtester(LoggerMixin):
             portfolio_manager=self.portfolio
         )
 
-        self.metrics_engine = metrics_engine or MetricsEngine(config)
+        # Initialize metrics engine with Numba JIT enabled by default for performance
+        self.metrics_engine = metrics_engine or MetricsEngine(config, use_numba=True)
         self.trade_logger = TradeLogger()
 
         # Runtime state

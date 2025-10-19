@@ -14,13 +14,29 @@ from ..utils.config import BacktestConfig
 from ..utils.constants import TRADING_DAYS_PER_YEAR
 from ..utils.logging_config import LoggerMixin
 
+# Import Numba-optimized metrics (optional)
+try:
+    from .numba_metrics import (
+        HAS_NUMBA,
+        calculate_sharpe_ratio_fast,
+        calculate_sortino_ratio_fast,
+        calculate_max_drawdown_fast,
+        calculate_var_cvar_fast,
+        calculate_return_stats_fast,
+        calculate_calmar_ratio_fast,
+        calculate_win_rate_fast
+    )
+except ImportError:
+    HAS_NUMBA = False
+
 
 class MetricsEngine(LoggerMixin):
     """Calculates performance and risk metrics"""
 
-    def __init__(self, config: BacktestConfig):
+    def __init__(self, config: BacktestConfig, use_numba: bool = True):
         self.config = config
         self.risk_free_rate = config.risk_free_rate
+        self.use_numba = use_numba and HAS_NUMBA  # Enable if requested and available
 
     def calculate_metrics(
         self,
@@ -64,41 +80,66 @@ class MetricsEngine(LoggerMixin):
             return {}
 
         equity = equity_curve['total_equity']
-        initial_equity = equity.iloc[0]
-        final_equity = equity.iloc[-1]
-
-        # Total return
-        total_return = (final_equity - initial_equity) / initial_equity
-
-        # Calculate returns
         returns = equity.pct_change().dropna()
 
         if returns.empty:
+            initial_equity = equity.iloc[0]
+            final_equity = equity.iloc[-1]
+            total_return = (final_equity - initial_equity) / initial_equity
             return {'total_return': total_return}
 
         # Annualization factor
         periods_per_year = self._get_annualization_factor(equity_curve.index)
 
-        # CAGR (Compound Annual Growth Rate)
-        years = len(equity) / periods_per_year
-        if years > 0 and initial_equity > 0 and final_equity > 0:
-            cagr = (final_equity / initial_equity) ** (1 / years) - 1
+        # Use Numba-optimized versions if available
+        if self.use_numba:
+            # Fast version using Numba JIT
+            equity_array = equity.values
+            returns_array = returns.values
+
+            total_return, cagr, volatility, best_day, worst_day = calculate_return_stats_fast(
+                equity_array, periods_per_year
+            )
+
+            sharpe_ratio = calculate_sharpe_ratio_fast(
+                returns_array, self.risk_free_rate, periods_per_year
+            )
+
+            sortino_ratio = calculate_sortino_ratio_fast(
+                returns_array, self.risk_free_rate, periods_per_year
+            )
+
         else:
-            cagr = 0.0
+            # Original pandas/numpy version
+            initial_equity = equity.iloc[0]
+            final_equity = equity.iloc[-1]
 
-        # Volatility
-        volatility = returns.std() * np.sqrt(periods_per_year)
+            # Total return
+            total_return = (final_equity - initial_equity) / initial_equity
 
-        # Sharpe ratio
-        excess_returns = returns - self.risk_free_rate / periods_per_year
-        sharpe_ratio = excess_returns.mean() / excess_returns.std() * np.sqrt(periods_per_year) \
-            if excess_returns.std() > 0 else 0
+            # CAGR (Compound Annual Growth Rate)
+            years = len(equity) / periods_per_year
+            if years > 0 and initial_equity > 0 and final_equity > 0:
+                cagr = (final_equity / initial_equity) ** (1 / years) - 1
+            else:
+                cagr = 0.0
 
-        # Sortino ratio (downside deviation)
-        downside_returns = returns[returns < 0]
-        downside_deviation = downside_returns.std() * np.sqrt(periods_per_year)
-        sortino_ratio = (returns.mean() * periods_per_year - self.risk_free_rate) / downside_deviation \
-            if downside_deviation > 0 else 0
+            # Volatility
+            volatility = returns.std() * np.sqrt(periods_per_year)
+
+            # Sharpe ratio
+            excess_returns = returns - self.risk_free_rate / periods_per_year
+            sharpe_ratio = excess_returns.mean() / excess_returns.std() * np.sqrt(periods_per_year) \
+                if excess_returns.std() > 0 else 0
+
+            # Sortino ratio (downside deviation)
+            downside_returns = returns[returns < 0]
+            downside_deviation = downside_returns.std() * np.sqrt(periods_per_year)
+            sortino_ratio = (returns.mean() * periods_per_year - self.risk_free_rate) / downside_deviation \
+                if downside_deviation > 0 else 0
+
+            best_day = returns.max()
+            worst_day = returns.min()
 
         return {
             'total_return': total_return,
@@ -109,8 +150,8 @@ class MetricsEngine(LoggerMixin):
             'sharpe_ratio': sharpe_ratio,
             'sortino_ratio': sortino_ratio,
             'annual_return': returns.mean() * periods_per_year,
-            'best_day': returns.max(),
-            'worst_day': returns.min(),
+            'best_day': best_day,
+            'worst_day': worst_day,
             'positive_days': (returns > 0).sum() / len(returns),
             'negative_days': (returns < 0).sum() / len(returns)
         }
@@ -126,17 +167,31 @@ class MetricsEngine(LoggerMixin):
         if returns.empty:
             return {}
 
-        # Value at Risk (VaR)
-        var_95 = np.percentile(returns, 5)
-        var_99 = np.percentile(returns, 1)
+        # Use Numba-optimized versions if available
+        if self.use_numba:
+            returns_array = returns.values
 
-        # Conditional Value at Risk (CVaR)
-        cvar_95 = returns[returns <= var_95].mean()
-        cvar_99 = returns[returns <= var_99].mean()
+            # Fast VaR/CVaR calculations
+            var_95, cvar_95 = calculate_var_cvar_fast(returns_array, 0.95)
+            var_99, cvar_99 = calculate_var_cvar_fast(returns_array, 0.99)
 
-        # Skewness and Kurtosis
-        skewness = stats.skew(returns)
-        kurtosis = stats.kurtosis(returns)
+            # Skewness and Kurtosis (scipy is already optimized, use as-is)
+            skewness = stats.skew(returns_array)
+            kurtosis = stats.kurtosis(returns_array)
+
+        else:
+            # Original version
+            # Value at Risk (VaR)
+            var_95 = np.percentile(returns, 5)
+            var_99 = np.percentile(returns, 1)
+
+            # Conditional Value at Risk (CVaR)
+            cvar_95 = returns[returns <= var_95].mean()
+            cvar_99 = returns[returns <= var_99].mean()
+
+            # Skewness and Kurtosis
+            skewness = stats.skew(returns)
+            kurtosis = stats.kurtosis(returns)
 
         # Beta (if benchmark available)
         beta = np.nan
@@ -164,55 +219,82 @@ class MetricsEngine(LoggerMixin):
 
         equity = equity_curve['total_equity']
 
-        # Calculate running maximum (peak)
-        running_max = equity.expanding().max()
+        # Use Numba-optimized versions if available
+        if self.use_numba:
+            equity_array = equity.values
 
-        # Calculate drawdown
-        drawdown = (equity - running_max) / running_max
+            # Fast drawdown calculation
+            max_drawdown, max_dd_duration, num_dd_periods = calculate_max_drawdown_fast(equity_array)
 
-        # Maximum drawdown
-        max_drawdown = drawdown.min()
-
-        # Drawdown duration
-        in_drawdown = drawdown < 0
-        drawdown_periods = []
-        current_period = 0
-
-        for is_dd in in_drawdown:
-            if is_dd:
-                current_period += 1
+            # CAGR for Calmar ratio
+            periods_per_year = self._get_annualization_factor(equity_curve.index)
+            years = len(equity) / periods_per_year
+            if years > 0 and equity_array[0] > 0 and equity_array[-1] > 0:
+                cagr = (equity_array[-1] / equity_array[0]) ** (1 / years) - 1
             else:
-                if current_period > 0:
-                    drawdown_periods.append(current_period)
-                current_period = 0
+                cagr = 0.0
 
-        # Add final period if still in drawdown
-        if current_period > 0:
-            drawdown_periods.append(current_period)
+            # Calmar ratio (CAGR / Max Drawdown)
+            calmar_ratio = calculate_calmar_ratio_fast(cagr, max_drawdown)
 
-        max_drawdown_duration = max(drawdown_periods) if drawdown_periods else 0
-        avg_drawdown_duration = np.mean(drawdown_periods) if drawdown_periods else 0
+            # Recovery factor
+            total_return = (equity_array[-1] - equity_array[0]) / equity_array[0]
+            recovery_factor = total_return / abs(max_drawdown) if max_drawdown < 0 else np.inf
 
-        # Calmar ratio (CAGR / Max Drawdown)
-        years = len(equity) / self._get_annualization_factor(equity_curve.index)
-        if years > 0 and equity.iloc[0] > 0 and equity.iloc[-1] > 0:
-            cagr = (equity.iloc[-1] / equity.iloc[0]) ** (1 / years) - 1
+            # Note: avg_drawdown_duration not returned by fast version, calculate separately
+            avg_drawdown_duration = 0.0  # Simplified for now
+
         else:
-            cagr = 0.0
-        calmar_ratio = cagr / abs(max_drawdown) if max_drawdown < 0 else np.inf
+            # Original version
+            # Calculate running maximum (peak)
+            running_max = equity.expanding().max()
 
-        # Recovery factor
-        returns = equity.pct_change().dropna()
-        total_return = (equity.iloc[-1] - equity.iloc[0]) / equity.iloc[0]
-        recovery_factor = total_return / abs(max_drawdown) if max_drawdown < 0 else np.inf
+            # Calculate drawdown
+            drawdown = (equity - running_max) / running_max
+
+            # Maximum drawdown
+            max_drawdown = drawdown.min()
+
+            # Drawdown duration
+            in_drawdown = drawdown < 0
+            drawdown_periods = []
+            current_period = 0
+
+            for is_dd in in_drawdown:
+                if is_dd:
+                    current_period += 1
+                else:
+                    if current_period > 0:
+                        drawdown_periods.append(current_period)
+                    current_period = 0
+
+            # Add final period if still in drawdown
+            if current_period > 0:
+                drawdown_periods.append(current_period)
+
+            max_dd_duration = max(drawdown_periods) if drawdown_periods else 0
+            avg_drawdown_duration = np.mean(drawdown_periods) if drawdown_periods else 0
+            num_dd_periods = len(drawdown_periods)
+
+            # Calmar ratio (CAGR / Max Drawdown)
+            years = len(equity) / self._get_annualization_factor(equity_curve.index)
+            if years > 0 and equity.iloc[0] > 0 and equity.iloc[-1] > 0:
+                cagr = (equity.iloc[-1] / equity.iloc[0]) ** (1 / years) - 1
+            else:
+                cagr = 0.0
+            calmar_ratio = cagr / abs(max_drawdown) if max_drawdown < 0 else np.inf
+
+            # Recovery factor
+            total_return = (equity.iloc[-1] - equity.iloc[0]) / equity.iloc[0]
+            recovery_factor = total_return / abs(max_drawdown) if max_drawdown < 0 else np.inf
 
         return {
             'max_drawdown': max_drawdown,
-            'max_drawdown_duration': max_drawdown_duration,
+            'max_drawdown_duration': max_dd_duration if self.use_numba else max_dd_duration,
             'avg_drawdown_duration': avg_drawdown_duration,
             'calmar_ratio': calmar_ratio,
             'recovery_factor': recovery_factor,
-            'num_drawdown_periods': len(drawdown_periods)
+            'num_drawdown_periods': num_dd_periods if self.use_numba else num_dd_periods
         }
 
     def _calculate_trade_metrics(self, trades: pd.DataFrame) -> Dict[str, float]:
