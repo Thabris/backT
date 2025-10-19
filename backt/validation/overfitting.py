@@ -16,6 +16,85 @@ import pandas as pd
 from scipy import stats
 from dataclasses import dataclass
 
+# Optional numba support for performance
+try:
+    from numba import jit
+    HAS_NUMBA = True
+except ImportError:
+    HAS_NUMBA = False
+    # Create a no-op decorator if numba is not available
+    def jit(*args, **kwargs):
+        def decorator(func):
+            return func
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return decorator
+
+
+@jit(nopython=True, cache=True)
+def _fast_rankdata(data: np.ndarray) -> np.ndarray:
+    """Fast ranking using numba (if available)"""
+    n = len(data)
+    sorter = np.argsort(data)
+    ranks = np.empty(n, dtype=np.float64)
+    ranks[sorter] = np.arange(1, n + 1)
+    return ranks
+
+
+@jit(nopython=True, cache=True)
+def _fast_pbo_calculation(is_performance: np.ndarray, oos_performance: np.ndarray) -> float:
+    """Vectorized PBO calculation using numba (if available)"""
+    n = len(is_performance)
+    oos_median = np.median(oos_performance)
+
+    # Sort by IS performance (descending)
+    is_sorted_indices = np.argsort(is_performance)[::-1]
+
+    # Count top half with below-median OOS
+    n_top_half = n // 2
+    count_below = 0
+    for i in range(n_top_half):
+        idx = is_sorted_indices[i]
+        if oos_performance[idx] < oos_median:
+            count_below += 1
+
+    return count_below / n_top_half
+
+
+@jit(nopython=True, cache=True)
+def _fast_dsr_calculation(
+    observed_sharpe: float,
+    n_trials: int,
+    returns_skewness: float,
+    returns_kurtosis: float,
+    n_observations: int
+) -> float:
+    """Fast DSR calculation using numba (if available)"""
+    if n_trials == 1:
+        expected_max_sharpe = 0.0
+    else:
+        # Euler-Mascheroni constant
+        euler_gamma = 0.5772156649
+        ln_n = np.log(n_trials)
+        ln_ln_n = np.log(ln_n)
+        ln_4pi = np.log(4 * np.pi)
+
+        expected_max = np.sqrt(2 * ln_n - ln_ln_n - ln_4pi) + euler_gamma / np.sqrt(2 * ln_n)
+        expected_max_sharpe = expected_max / np.sqrt(n_observations)
+
+    # Variance of the estimated Sharpe ratio
+    excess_kurtosis = returns_kurtosis - 3.0
+    sharpe_variance = (
+        1 + (observed_sharpe ** 2) / 2
+        - observed_sharpe * returns_skewness
+        + (observed_sharpe ** 2) * excess_kurtosis / 4
+    ) / (n_observations - 1)
+
+    sharpe_std = np.sqrt(sharpe_variance)
+    dsr = (observed_sharpe - expected_max_sharpe) / sharpe_std
+
+    return dsr
+
 
 @dataclass
 class OverfittingMetrics:
@@ -32,7 +111,8 @@ class OverfittingMetrics:
 def calculate_probability_backtest_overfitting(
     is_performance: np.ndarray,
     oos_performance: np.ndarray,
-    metric_name: str = "sharpe_ratio"
+    metric_name: str = "sharpe_ratio",
+    use_numba: bool = True
 ) -> float:
     """
     Calculate Probability of Backtest Overfitting (PBO)
@@ -44,6 +124,7 @@ def calculate_probability_backtest_overfitting(
         is_performance: In-sample performance metrics for each parameter set
         oos_performance: Out-of-sample performance for same parameter sets
         metric_name: Name of the metric being evaluated
+        use_numba: Use numba JIT compilation if available (default: True)
 
     Returns:
         PBO value between 0 and 1 (lower is better)
@@ -63,16 +144,13 @@ def calculate_probability_backtest_overfitting(
     if len(is_performance) < 2:
         raise ValueError("Need at least 2 parameter sets to calculate PBO")
 
-    # Rank parameter sets by IS performance
-    is_ranks = stats.rankdata(is_performance)
+    # Use fast numba version if available and requested
+    if HAS_NUMBA and use_numba:
+        return _fast_pbo_calculation(is_performance, oos_performance)
 
-    # Get the logits (IS rank vs OOS performance relationship)
+    # Fallback to numpy version
     n = len(is_performance)
-
-    # Calculate median OOS performance
     oos_median = np.median(oos_performance)
-
-    # For each IS rank, check if corresponding OOS is below median
     below_median = oos_performance < oos_median
 
     # Calculate PBO using the ranking method
@@ -91,7 +169,8 @@ def calculate_deflated_sharpe_ratio(
     n_trials: int,
     returns_skewness: float = 0.0,
     returns_kurtosis: float = 3.0,
-    n_observations: int = 252
+    n_observations: int = 252,
+    use_numba: bool = True
 ) -> float:
     """
     Calculate Deflated Sharpe Ratio (DSR)
@@ -105,6 +184,7 @@ def calculate_deflated_sharpe_ratio(
         returns_skewness: Skewness of returns distribution (0 = normal)
         returns_kurtosis: Kurtosis of returns (3 = normal, excess = 0)
         n_observations: Number of return observations (e.g., 252 for daily over 1 year)
+        use_numba: Use numba JIT compilation if available (default: True)
 
     Returns:
         DSR value (typically < observed Sharpe)
@@ -123,8 +203,13 @@ def calculate_deflated_sharpe_ratio(
     if n_observations < 1:
         raise ValueError("n_observations must be at least 1")
 
-    # Expected maximum Sharpe under null hypothesis (no skill)
-    # This is the Sharpe you'd expect to see by chance given n_trials
+    # Use fast numba version if available and requested
+    if HAS_NUMBA and use_numba:
+        return _fast_dsr_calculation(
+            observed_sharpe, n_trials, returns_skewness, returns_kurtosis, n_observations
+        )
+
+    # Fallback to original version
     expected_max_sharpe = _calculate_expected_max_sharpe(n_trials, n_observations)
 
     # Variance of the estimated Sharpe ratio
@@ -256,7 +341,8 @@ def analyze_overfitting_comprehensive(
     oos_sharpe_ratios: np.ndarray,
     returns_skewness: float = 0.0,
     returns_kurtosis: float = 3.0,
-    n_observations: int = 252
+    n_observations: int = 252,
+    use_numba: bool = True
 ) -> OverfittingMetrics:
     """
     Perform comprehensive overfitting analysis
@@ -267,30 +353,32 @@ def analyze_overfitting_comprehensive(
         returns_skewness: Skewness of returns
         returns_kurtosis: Kurtosis of returns
         n_observations: Number of observations in each backtest
+        use_numba: Use numba JIT compilation if available (default: True)
 
     Returns:
         OverfittingMetrics object with all metrics
     """
     n_trials = len(is_sharpe_ratios)
 
-    # Calculate PBO
+    # Calculate PBO (vectorized with optional numba acceleration)
     pbo = calculate_probability_backtest_overfitting(
-        is_sharpe_ratios, oos_sharpe_ratios
+        is_sharpe_ratios, oos_sharpe_ratios, use_numba=use_numba
     )
 
-    # Get best IS performance
+    # Get best IS performance (vectorized numpy operation)
     best_is_sharpe = np.max(is_sharpe_ratios)
 
-    # Calculate DSR for best strategy
+    # Calculate DSR for best strategy (vectorized with optional numba acceleration)
     dsr = calculate_deflated_sharpe_ratio(
         best_is_sharpe,
         n_trials,
         returns_skewness,
         returns_kurtosis,
-        n_observations
+        n_observations,
+        use_numba=use_numba
     )
 
-    # Calculate degradation
+    # Calculate degradation (vectorized numpy operations)
     is_mean = np.mean(is_sharpe_ratios)
     oos_mean = np.mean(oos_sharpe_ratios)
 
@@ -299,7 +387,7 @@ def analyze_overfitting_comprehensive(
     else:
         degradation_pct = np.nan
 
-    # Calculate stability
+    # Calculate stability (vectorized)
     sharpe_stability = calculate_sharpe_stability(oos_sharpe_ratios)
 
     return OverfittingMetrics(

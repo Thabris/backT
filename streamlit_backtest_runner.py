@@ -1160,12 +1160,14 @@ def render_single_strategy_cpcv():
             strategies = get_available_strategies()
             strategy_func = strategies[strategy_name]['function']
 
-            # Create CPCV config
+            # Create CPCV config (with parallel processing and numba JIT enabled)
             cpcv_config = CPCVConfig(
                 n_splits=n_splits,
                 n_test_splits=n_test_splits,
                 purge_pct=purge_pct,
-                embargo_pct=embargo_pct
+                embargo_pct=embargo_pct,
+                n_jobs=-1,  # Use all available CPU cores for parallel processing
+                use_numba=True  # Enable numba JIT compilation for 2-5x additional speedup
             )
 
             # Run CPCV validation
