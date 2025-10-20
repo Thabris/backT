@@ -25,7 +25,7 @@ class DataLoader(ABC, LoggerMixin):
         start_date: str,
         end_date: str,
         **kwargs
-    ) -> Union[TimeSeriesData, Dict[str, TimeSeriesData]]:
+    ) -> Dict[str, TimeSeriesData]:
         """
         Load data for the specified symbols and date range
 
@@ -36,7 +36,7 @@ class DataLoader(ABC, LoggerMixin):
             **kwargs: Additional parameters specific to the loader
 
         Returns:
-            DataFrame for single symbol or dict of DataFrames for multiple symbols
+            Dict of DataFrames (one per symbol) - always returns dict for consistency
         """
         pass
 
@@ -139,8 +139,8 @@ class YahooDataLoader(DataLoader):
         start_date: str,
         end_date: str,
         **kwargs
-    ) -> Union[TimeSeriesData, Dict[str, TimeSeriesData]]:
-        """Load data from Yahoo Finance"""
+    ) -> Dict[str, TimeSeriesData]:
+        """Load data from Yahoo Finance (always returns dict for consistency)"""
         try:
             import yfinance as yf
         except ImportError:
@@ -182,7 +182,8 @@ class YahooDataLoader(DataLoader):
                 if not self.validate_data(data):
                     raise ValueError(f"Invalid data format for {symbols[0]}")
 
-                return data if not single_symbol else data
+                # Always return dict for consistency
+                return {symbols[0]: data}
 
             else:
                 # Multiple symbols - return dict
@@ -259,7 +260,7 @@ class CSVDataLoader(DataLoader):
         end_date: str,
         file_path: Optional[str] = None,
         **kwargs
-    ) -> Union[TimeSeriesData, Dict[str, TimeSeriesData]]:
+    ) -> Dict[str, TimeSeriesData]:
         """
         Load data from CSV file(s)
 
@@ -283,9 +284,9 @@ class CSVDataLoader(DataLoader):
         end_dt = pd.to_datetime(end_date)
 
         if path.is_file():
-            # Single file
+            # Single file - always return dict for consistency
             data = self._load_single_csv(path, symbols, start_dt, end_dt)
-            return data if not single_symbol else data[symbols[0]]
+            return data
 
         elif path.is_dir():
             # Directory with multiple files
@@ -398,18 +399,26 @@ class CustomDataLoader(DataLoader):
         start_date: str,
         end_date: str,
         **kwargs
-    ) -> Union[TimeSeriesData, Dict[str, TimeSeriesData]]:
-        """Load data using custom function"""
+    ) -> Dict[str, TimeSeriesData]:
+        """Load data using custom function (always returns dict for consistency)"""
         try:
             data = self.load_function(symbols, start_date, end_date, **kwargs)
 
             # Validate and process the returned data
             if isinstance(data, pd.DataFrame):
+                # Single DataFrame - wrap in dict for consistency
                 data = self._ensure_datetime_index(data)
                 data = self._ensure_required_columns(data)
                 if not self.validate_data(data):
                     raise ValueError("Custom data validation failed")
-                return data
+                # Determine symbol name
+                if isinstance(symbols, str):
+                    symbol = symbols
+                elif isinstance(symbols, list) and len(symbols) == 1:
+                    symbol = symbols[0]
+                else:
+                    raise ValueError("Single DataFrame returned but multiple symbols requested")
+                return {symbol: data}
 
             elif isinstance(data, dict):
                 processed_data = {}

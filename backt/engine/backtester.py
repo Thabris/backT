@@ -96,7 +96,8 @@ class Backtester(LoggerMixin):
             BacktestResult containing all backtest outputs
         """
         start_time = datetime.now()
-        self.logger.info("Starting backtest")
+        if self.config.verbose:
+            self.logger.info("Starting backtest")
 
         try:
             # Prepare universe
@@ -104,10 +105,11 @@ class Backtester(LoggerMixin):
                 universe = [universe]
 
             # Load data
-            self.logger.info(f"Loading data for {len(universe)} symbols")
+            if self.config.verbose:
+                self.logger.info(f"Loading data for {len(universe)} symbols")
             self.market_data = self._load_data(universe)
 
-            if not self.market_data:
+            if self.market_data is None or len(self.market_data) == 0:
                 raise ValueError("No data loaded for any symbols")
 
             # Get date range from data
@@ -116,7 +118,8 @@ class Backtester(LoggerMixin):
                 all_dates.update(symbol_data.index)
 
             date_range = sorted(all_dates)
-            self.logger.info(f"Backtesting {len(date_range)} periods from {date_range[0]} to {date_range[-1]}")
+            if self.config.verbose:
+                self.logger.info(f"Backtesting {len(date_range)} periods from {date_range[0]} to {date_range[-1]}")
 
             # Initialize strategy parameters
             if strategy_params is None:
@@ -174,7 +177,8 @@ class Backtester(LoggerMixin):
                 returns_correlation_matrix=returns_correlation_matrix
             )
 
-            self.logger.info(f"Backtest completed in {runtime:.2f} seconds")
+            if self.config.verbose:
+                self.logger.info(f"Backtest completed in {runtime:.2f} seconds")
             return result
 
         except Exception as e:
@@ -255,8 +259,8 @@ class Backtester(LoggerMixin):
                 # Record equity snapshot
                 self.portfolio.get_equity_snapshot(current_prices, current_time)
 
-                # Progress logging
-                if i % 100 == 0 or i == len(date_range) - 1:
+                # Progress logging (only if verbose enabled)
+                if self.config.verbose and (i % 100 == 0 or i == len(date_range) - 1):
                     progress = (i + 1) / len(date_range) * 100
                     equity = self.portfolio.get_portfolio_value(current_prices)
                     self.logger.info(

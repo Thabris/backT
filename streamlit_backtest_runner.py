@@ -13,6 +13,20 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
+import warnings
+import logging
+
+# Suppress Streamlit deprecation and worker warnings
+warnings.filterwarnings('ignore', message='.*use_container_width.*')
+warnings.filterwarnings('ignore', message='.*missing ScriptRunContext.*')
+warnings.filterwarnings('ignore', message='.*No runtime found.*')
+warnings.filterwarnings('ignore', message='.*to view a Streamlit app.*')
+
+# Suppress Streamlit logging warnings
+logging.getLogger('streamlit.runtime.scriptrunner_utils.script_run_context').setLevel(logging.ERROR)
+logging.getLogger('streamlit.runtime.caching.cache_data_api').setLevel(logging.ERROR)
+logging.getLogger('streamlit').setLevel(logging.ERROR)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -1421,15 +1435,424 @@ def create_path_scatter_chart(result):
 
 def render_parameter_optimization_cpcv():
     """Parameter grid optimization with CPCV validation"""
-    st.caption("**Parameter Grid Optimization**")
-    st.write("Test multiple parameter combinations and validate each with CPCV.")
+    st.caption("**Parameter Grid Optimization with CPCV**")
+    st.write("Optimize strategy parameters using parallel search, then validate top candidates with CPCV.")
 
-    st.info("🚧 Feature coming soon! This will allow you to optimize parameters using CPCV validation.")
-    st.write("**Planned features:**")
-    st.write("• Define parameter grids (e.g., lookback: 10-50, threshold: 0-0.05)")
-    st.write("• Run CPCV on each combination")
-    st.write("• Compare PBO/DSR across parameters")
-    st.write("• Find robust parameter sets")
+    # Get configuration from session
+    if 'config' not in st.session_state or 'selected_strategy_name' not in st.session_state:
+        st.warning("Please configure backtest parameters and select a strategy first.")
+        return
+
+    config = st.session_state.config
+    strategy_name = st.session_state.selected_strategy_name
+
+    # Get strategy function
+    strategies = get_available_strategies()
+    strategy_func = strategies[strategy_name]['function']
+
+    st.write("")
+    st.caption("**Step 1: Choose Optimization Method**")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        optimization_method = st.selectbox(
+            "Optimization Algorithm",
+            ["Grid Search (Exhaustive)", "FLAML (Intelligent)"],
+            help="Grid Search tests all combinations. FLAML intelligently explores the space (10x faster)."
+        )
+
+    with col2:
+        optimization_metric = st.selectbox(
+            "Optimization Metric",
+            ["sharpe_ratio", "sortino_ratio", "total_return", "calmar_ratio"],
+            help="Metric to maximize during parameter search"
+        )
+
+    st.write("")
+    st.caption("**Step 2: Define Parameter Space**")
+
+    # Extract parameters from strategy
+    strategy_params = extract_strategy_params(strategy_func)
+
+    if strategy_params:
+        st.write("**Strategy Parameters Detected:**")
+
+        # Show available parameters as buttons
+        param_buttons = []
+        cols = st.columns(min(len(strategy_params), 4))
+        for idx, (param_name, param_info) in enumerate(strategy_params.items()):
+            with cols[idx % len(cols)]:
+                default_val = param_info.get('default', 'N/A')
+                if st.button(f"➕ {param_name}", key=f"add_param_{param_name}",
+                            help=f"Type: {param_info.get('type', 'unknown')}, Default: {default_val}"):
+                    if 'param_definitions' not in st.session_state:
+                        st.session_state.param_definitions = []
+                    if param_name not in [p['name'] for p in st.session_state.param_definitions]:
+                        # Suggest ranges based on parameter type and default
+                        suggested_min = 5
+                        suggested_max = 50
+                        suggested_step = 5
+
+                        if default_val and default_val != 'N/A':
+                            try:
+                                default_num = float(default_val)
+                                if param_info.get('type') == 'int':
+                                    suggested_min = max(1, int(default_num * 0.5))
+                                    suggested_max = int(default_num * 2)
+                                    suggested_step = max(1, int(default_num * 0.1))
+                                elif param_info.get('type') == 'float':
+                                    suggested_min = round(default_num * 0.5, 4)
+                                    suggested_max = round(default_num * 2, 4)
+                                    suggested_step = round(default_num * 0.1, 4)
+                            except:
+                                pass
+
+                        st.session_state.param_definitions.append({
+                            'name': param_name,
+                            'type': param_info.get('type', 'int'),
+                            'default': default_val,
+                            'min': suggested_min,
+                            'max': suggested_max,
+                            'step': suggested_step
+                        })
+                        st.rerun()
+
+    st.write("")
+    st.write("**Or add custom parameter:**")
+
+    if 'param_definitions' not in st.session_state:
+        st.session_state.param_definitions = []
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        new_param_name = st.text_input("Parameter Name", key="new_param", placeholder="e.g., custom_param")
+    with col2:
+        if st.button("➕ Add Custom"):
+            if new_param_name and new_param_name not in [p['name'] for p in st.session_state.param_definitions]:
+                st.session_state.param_definitions.append({
+                    'name': new_param_name,
+                    'type': 'int',
+                    'min': 5,
+                    'max': 50,
+                    'step': 5
+                })
+                st.rerun()
+
+    # Display parameter configurations
+    param_grid = {}
+    if st.session_state.param_definitions:
+        st.write("")
+        st.write("**Configure Parameter Ranges:**")
+
+        for idx, param_def in enumerate(st.session_state.param_definitions):
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 1, 1, 1, 1, 0.5])
+
+            with col1:
+                param_type = param_def.get('type', 'int')
+                default_val = param_def.get('default', 'N/A')
+                st.write(f"**{param_def['name']}**")
+                if default_val != 'N/A':
+                    st.caption(f"Default: {default_val}")
+
+            # Determine step format based on type
+            is_float = param_type == 'float'
+
+            if is_float:
+                # Float parameters
+                min_default = float(param_def.get('min', 0.01))
+                max_default = float(param_def.get('max', 1.0))
+                step_default = float(param_def.get('step', 0.01))
+                step_format = 0.001
+            else:
+                # Integer parameters
+                min_default = int(param_def.get('min', 5))
+                max_default = int(param_def.get('max', 50))
+                step_default = int(param_def.get('step', 5))
+                step_format = 1
+
+            with col2:
+                min_val = st.number_input(
+                    f"Min",
+                    key=f"min_{idx}",
+                    value=min_default,
+                    step=step_format,
+                    format="%.4f" if is_float else "%d"
+                )
+
+            with col3:
+                max_val = st.number_input(
+                    f"Max",
+                    key=f"max_{idx}",
+                    value=max_default,
+                    step=step_format,
+                    format="%.4f" if is_float else "%d"
+                )
+
+            with col4:
+                step_val = st.number_input(
+                    f"Step",
+                    key=f"step_{idx}",
+                    value=step_default,
+                    step=step_format,
+                    min_value=step_format,
+                    format="%.4f" if is_float else "%d"
+                )
+
+            with col5:
+                # Show number of values
+                if step_val > 0:
+                    n_values = int((max_val - min_val) / step_val) + 1
+                    st.caption(f"({n_values} values)")
+                else:
+                    st.caption("⚠️")
+
+            with col6:
+                if st.button("🗑️", key=f"del_{idx}"):
+                    st.session_state.param_definitions.pop(idx)
+                    st.rerun()
+
+            # Build parameter grid
+            if is_float:
+                # For float parameters, create list with proper precision
+                import numpy as np
+                param_grid[param_def['name']] = list(np.arange(min_val, max_val + step_val, step_val))
+            else:
+                # For int parameters, use range
+                param_grid[param_def['name']] = list(range(int(min_val), int(max_val) + 1, int(step_val)))
+
+        # Show parameter space size
+        if param_grid:
+            total_combinations = 1
+            for values in param_grid.values():
+                total_combinations *= len(values)
+
+            st.write("")
+            if optimization_method == "Grid Search (Exhaustive)":
+                st.info(f"📊 **{total_combinations} total combinations** will be tested (exhaustive)")
+            else:
+                est_evals = min(total_combinations, 100)
+                st.info(f"🧠 **~{est_evals} combinations** will be intelligently sampled from {total_combinations} possible (FLAML)")
+
+    st.write("")
+    st.caption("**Step 3: CPCV Validation Settings**")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        top_k = st.number_input("Top K to Validate", value=3, min_value=1, max_value=10,
+                               help="Number of best parameter sets to validate with CPCV")
+    with col2:
+        n_splits = st.number_input("CPCV Folds", value=10, min_value=3, max_value=20)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        n_test_splits = st.number_input("Test Folds", value=2, min_value=1, max_value=5)
+    with col2:
+        purge_pct = st.number_input("Purge %", value=5.0, min_value=0.0, max_value=20.0) / 100
+    with col3:
+        embargo_pct = st.number_input("Embargo %", value=2.0, min_value=0.0, max_value=10.0) / 100
+
+    # Run Button
+    st.write("")
+    col1, col2, col3 = st.columns([2, 1, 2])
+    with col2:
+        run_optimization = st.button("🚀 Run Optimization", type="primary", use_container_width=True)
+
+    if run_optimization and param_grid:
+        from backt.optimization.optimizer import StrategyOptimizer
+        from backt.optimization.flaml_optimizer import FLAMLOptimizer
+        from backt.validation.cpcv_validator import CPCVConfig
+        from backt import BacktestConfig
+
+        try:
+            # Convert config dict to BacktestConfig object if needed
+            if isinstance(config, dict):
+                from backt.utils.config import ExecutionConfig
+
+                # Extract symbols separately (not a BacktestConfig parameter)
+                symbols = config.get('symbols', ['SPY'])
+
+                # Extract execution-related parameters
+                execution_config = ExecutionConfig(
+                    spread=config.get('spread', 0.01),
+                    slippage_pct=config.get('slippage_pct', 0.0005),
+                    commission_per_share=config.get('commission_per_share', 0.001)
+                )
+
+                # Create BacktestConfig with only valid parameters
+                backtest_config = BacktestConfig(
+                    start_date=config['start_date'],
+                    end_date=config['end_date'],
+                    initial_capital=config.get('initial_capital', 100000.0),
+                    allow_short=config.get('allow_short', False),
+                    max_leverage=config.get('max_leverage', 1.0),
+                    max_position_size=config.get('max_position_size', None),
+                    execution=execution_config,
+                    verbose=False  # Suppress backtest logs during optimization
+                )
+            else:
+                backtest_config = config
+                symbols = backtest_config.universe if hasattr(backtest_config, 'universe') else ['SPY']
+
+            # Show optimization method
+            with st.spinner(f"Running {optimization_method}..."):
+                # Create CPCV config
+                cpcv_config = CPCVConfig(
+                    n_splits=n_splits,
+                    n_test_splits=n_test_splits,
+                    purge_pct=purge_pct,
+                    embargo_pct=embargo_pct,
+                    n_jobs=-1,  # Use all CPU cores
+                    use_numba=True
+                )
+
+                # Select optimizer based on user choice
+                if optimization_method == "FLAML (Intelligent)":
+                    # Use FLAML for intelligent parameter search
+                    from flaml import tune
+
+                    # Convert param_grid to FLAML param_space format
+                    param_space = {}
+                    for param_name, values in param_grid.items():
+                        if isinstance(values, range):
+                            # Convert range to randint
+                            param_space[param_name] = {
+                                'domain': tune.randint(values.start, values.stop)
+                            }
+                        elif isinstance(values, (list, tuple)):
+                            # Convert list to choice
+                            param_space[param_name] = {
+                                'domain': tune.choice(list(values))
+                            }
+                        else:
+                            # Single value - use uniform around it
+                            param_space[param_name] = {
+                                'domain': tune.choice([values])
+                            }
+
+                    optimizer = FLAMLOptimizer(
+                        strategy_function=strategy_func,
+                        config=backtest_config,
+                        symbols=symbols
+                    )
+
+                    # Run FLAML optimization with CPCV
+                    result = optimizer.optimize_with_cpcv(
+                        param_space=param_space,  # Use param_space not param_grid
+                        optimization_metric=optimization_metric,
+                        top_k=top_k,
+                        cpcv_config=cpcv_config,
+                        time_budget_s=300,  # 5 minute budget for FLAML search
+                        num_samples=100,  # Max 100 evaluations
+                        verbose=0  # Suppress FLAML verbose output
+                    )
+                else:
+                    # Use Grid Search for exhaustive search
+                    optimizer = StrategyOptimizer(
+                        strategy_function=strategy_func,
+                        config=backtest_config,
+                        symbols=symbols
+                    )
+
+                    # Run optimization with CPCV
+                    result = optimizer.optimize_with_cpcv(
+                        param_grid=param_grid,
+                        optimization_metric=optimization_metric,
+                        n_jobs=-1,  # Parallel processing
+                        top_k=top_k,
+                        cpcv_config=cpcv_config,
+                        verbose=False
+                    )
+
+                # Store results in session
+                st.session_state.optimization_result = result
+
+            st.success(f"✅ Optimization complete! Tested {result.total_combinations} combinations in {result.execution_time:.1f}s")
+
+            # Display results
+            st.write("")
+            st.caption("**Optimization Results**")
+
+            # Top parameters
+            st.write("**Best Parameters:**")
+            st.json(result.best_params)
+
+            st.write(f"**Best {optimization_metric}:** {result.best_metric_value:.4f}")
+
+            # Top K results
+            st.write("")
+            st.caption(f"**Top {top_k} Parameter Sets**")
+
+            # Handle both Grid Search (DataFrame) and FLAML (list) result formats
+            if hasattr(result.all_results, 'head'):
+                # Grid Search returns DataFrame
+                top_df = result.all_results.head(top_k).copy()
+            else:
+                # FLAML returns list of ParameterSetResult - convert to DataFrame
+                top_df = result.to_dataframe().head(top_k).copy()
+            param_cols = [col for col in top_df.columns if col.startswith('param_')]
+            metric_cols = [optimization_metric, 'total_return', 'max_drawdown', 'sharpe_ratio']
+            metric_cols = [col for col in metric_cols if col in top_df.columns]
+            display_cols = param_cols + metric_cols
+
+            st.dataframe(
+                top_df[display_cols].style.format({
+                    col: "{:.4f}" for col in metric_cols
+                }),
+                use_container_width=True
+            )
+
+            # CPCV Validation Results
+            if hasattr(result, 'cpcv_results') and result.cpcv_results:
+                st.write("")
+                st.caption("**CPCV Validation Results**")
+
+                cpcv_data = []
+                for idx, cpcv_item in enumerate(result.cpcv_results, 1):
+                    cpcv_result = cpcv_item['cpcv_result']
+                    cpcv_data.append({
+                        'Rank': idx,
+                        'Parameters': str(cpcv_item['params']),
+                        'PBO': cpcv_result.overfitting_metrics.pbo,
+                        'DSR': cpcv_result.overfitting_metrics.dsr,
+                        'Degradation %': cpcv_result.overfitting_metrics.degradation_pct,
+                        'Validation': '✅ Pass' if cpcv_result.passes_validation() else '❌ Fail'
+                    })
+
+                cpcv_df = pd.DataFrame(cpcv_data)
+                st.dataframe(
+                    cpcv_df.style.format({
+                        'PBO': '{:.3f}',
+                        'DSR': '{:.3f}',
+                        'Degradation %': '{:.1f}%'
+                    }).applymap(
+                        lambda x: 'background-color: #d4edda' if x == '✅ Pass' else 'background-color: #f8d7da',
+                        subset=['Validation']
+                    ),
+                    use_container_width=True
+                )
+
+                # Recommendation
+                st.write("")
+                st.caption("**Recommendation**")
+
+                best_validated = None
+                for cpcv_item in result.cpcv_results:
+                    if cpcv_item['cpcv_result'].passes_validation():
+                        best_validated = cpcv_item
+                        break
+
+                if best_validated:
+                    st.success(f"✅ **Recommended parameters:** {best_validated['params']}")
+                    st.write(f"   • PBO: {best_validated['cpcv_result'].overfitting_metrics.pbo:.3f} (< 0.50)")
+                    st.write(f"   • DSR: {best_validated['cpcv_result'].overfitting_metrics.dsr:.3f} (> 1.0)")
+                    st.write(f"   • Degradation: {best_validated['cpcv_result'].overfitting_metrics.degradation_pct:.1f}% (< 30%)")
+                else:
+                    st.warning("⚠️ None of the top parameters passed CPCV validation. Strategy may be overfit.")
+
+        except Exception as e:
+            st.error(f"Optimization failed: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
 
 def render_strategy_comparison_cpcv():

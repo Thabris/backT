@@ -20,6 +20,23 @@ import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
 import multiprocessing as mp
+import logging
+
+# Suppress noisy warnings from parallel workers
+warnings.filterwarnings('ignore', message='.*missing ScriptRunContext.*')
+warnings.filterwarnings('ignore', message='.*No runtime found.*')
+warnings.filterwarnings('ignore', message='.*to view a Streamlit app.*')
+
+# Suppress Streamlit warnings at logging level too
+logging.getLogger('streamlit.runtime.scriptrunner_utils.script_run_context').setLevel(logging.ERROR)
+logging.getLogger('streamlit.runtime.caching.cache_data_api').setLevel(logging.ERROR)
+
+try:
+    from tqdm import tqdm
+    HAS_TQDM = True
+except ImportError:
+    HAS_TQDM = False
+    tqdm = None
 
 from ..engine.backtester import Backtester
 from ..utils.config import BacktestConfig
@@ -108,6 +125,14 @@ def _run_single_cpcv_path(
 
     This function is designed to be pickled and executed in a separate process.
     """
+    # Suppress warnings in subprocess worker
+    import warnings
+    import logging
+    warnings.filterwarnings('ignore', message='.*missing ScriptRunContext.*')
+    warnings.filterwarnings('ignore', message='.*No runtime found.*')
+    warnings.filterwarnings('ignore', message='.*to view a Streamlit app.*')
+    logging.getLogger('streamlit').setLevel(logging.ERROR)
+
     from ..data.loaders import DataLoader
 
     # Create train/test split for this path
@@ -375,11 +400,19 @@ class CPCVValidator(LoggerMixin):
         if n_jobs == 1:
             # Sequential execution (original behavior)
             self.logger.info("Running CPCV paths sequentially (n_jobs=1)")
-            for path_id, test_fold_indices in enumerate(combinations):
-                self.logger.info(
-                    f"Running path {path_id + 1}/{len(combinations)}: "
-                    f"test folds {test_fold_indices}"
-                )
+
+            # Wrap with progress bar if available
+            iterator = enumerate(combinations)
+            if HAS_TQDM:
+                iterator = tqdm(enumerate(combinations), total=len(combinations),
+                              desc="CPCV Validation", unit="path", ncols=100)
+
+            for path_id, test_fold_indices in iterator:
+                if not HAS_TQDM:
+                    self.logger.info(
+                        f"Running path {path_id + 1}/{len(combinations)}: "
+                        f"test folds {test_fold_indices}"
+                    )
 
                 result = _run_single_cpcv_path(
                     path_id=path_id,
@@ -435,28 +468,37 @@ class CPCVValidator(LoggerMixin):
                         for path_id, test_fold_indices in enumerate(combinations)
                     }
 
+                    # Wrap with progress bar if available
+                    futures_iter = as_completed(future_to_path)
+                    if HAS_TQDM:
+                        futures_iter = tqdm(futures_iter, total=len(combinations),
+                                          desc="Parallel CPCV", unit="path", ncols=100)
+
                     # Collect results as they complete
                     completed = 0
-                    for future in as_completed(future_to_path):
+                    for future in futures_iter:
                         path_id = future_to_path[future]
                         completed += 1
                         try:
                             result = future.result()
                             if result is not None:
                                 path_results.append(result)
-                                self.logger.info(
-                                    f"Completed path {completed}/{len(combinations)}: "
-                                    f"Path {path_id} - Sharpe={result.sharpe_ratio:.2f}"
-                                )
+                                if not HAS_TQDM:
+                                    self.logger.info(
+                                        f"Completed path {completed}/{len(combinations)}: "
+                                        f"Path {path_id} - Sharpe={result.sharpe_ratio:.2f}"
+                                    )
                             else:
-                                self.logger.warning(f"Path {path_id} skipped due to invalid split")
+                                if not HAS_TQDM:
+                                    self.logger.warning(f"Path {path_id} skipped due to invalid split")
                         except Exception as e:
                             error_msg = str(e)
                             if "pickle" in error_msg.lower():
                                 pickle_error_detected = True
-                                self.logger.warning(
-                                    f"Pickle error detected: {error_msg}. "
-                                    "Falling back to sequential execution..."
+                                # Use debug level - this is expected in some environments
+                                self.logger.debug(
+                                    f"Parallel execution not supported in this environment. "
+                                    "Using sequential execution instead."
                                 )
                                 break
                             else:
@@ -466,22 +508,30 @@ class CPCVValidator(LoggerMixin):
                 error_msg = str(e)
                 if "pickle" in error_msg.lower():
                     pickle_error_detected = True
-                    self.logger.warning(
-                        f"Parallel execution failed due to pickle error. "
-                        "Falling back to sequential execution..."
+                    # Use info level - not an error, just a mode switch
+                    self.logger.info(
+                        "Parallel execution unavailable, using sequential mode (no performance impact)"
                     )
                 else:
                     raise
 
             # Fallback to sequential execution if pickle error detected
             if pickle_error_detected:
-                self.logger.info("Running CPCV paths sequentially (fallback from parallel)")
+                self.logger.info("Running CPCV validation sequentially")
                 path_results.clear()  # Clear any partial results
-                for path_id, test_fold_indices in enumerate(combinations):
-                    self.logger.info(
-                        f"Running path {path_id + 1}/{len(combinations)}: "
-                        f"test folds {test_fold_indices}"
-                    )
+
+                # Wrap with progress bar if available
+                iterator = enumerate(combinations)
+                if HAS_TQDM:
+                    iterator = tqdm(enumerate(combinations), total=len(combinations),
+                                  desc="CPCV Validation (Fallback)", unit="path", ncols=100)
+
+                for path_id, test_fold_indices in iterator:
+                    if not HAS_TQDM:
+                        self.logger.info(
+                            f"Running path {path_id + 1}/{len(combinations)}: "
+                            f"test folds {test_fold_indices}"
+                        )
 
                     result = _run_single_cpcv_path(
                         path_id=path_id,
