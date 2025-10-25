@@ -402,11 +402,13 @@ def kalman_ma_crossover_long_only(
             # Generate signals - LONG ONLY
             if golden_cross:
                 signals[symbol] = 'BUY'
+                long_positions.append(symbol)
             elif death_cross:
                 signals[symbol] = 'SELL'
                 # Go to cash
             elif current_fast > current_slow:
                 signals[symbol] = 'HOLD_LONG'
+                long_positions.append(symbol)
             else:
                 signals[symbol] = 'NEUTRAL'
                 # Stay in cash
@@ -651,6 +653,7 @@ def rsi_mean_reversion(
             # Generate signals based on RSI levels
             if current_rsi < oversold:
                 signals[symbol] = 'OVERSOLD_BUY'
+                long_positions.append(symbol)
             elif current_rsi > overbought:
                 signals[symbol] = 'OVERBOUGHT_SELL'
                 # Exit position
@@ -660,6 +663,7 @@ def rsi_mean_reversion(
                     if positions[symbol].quantity > 0:
                         # Hold position until overbought
                         signals[symbol] = 'HOLD'
+                        long_positions.append(symbol)
                     else:
                         signals[symbol] = 'NEUTRAL'
                 else:
@@ -1021,11 +1025,13 @@ def stochastic_momentum(
             # Generate signals
             if bullish_cross:
                 signals[symbol] = 'STOCH_OVERSOLD_BUY'
+                long_positions.append(symbol)
             elif bearish_cross:
                 signals[symbol] = 'STOCH_OVERBOUGHT_SELL'
             elif current_k > current_d and current_k < overbought:
                 # Hold long position if still bullish
                 signals[symbol] = 'STOCH_HOLD'
+                long_positions.append(symbol)
             else:
                 signals[symbol] = 'NEUTRAL'
 
@@ -1136,6 +1142,7 @@ def bollinger_mean_reversion(
             # Generate signals
             if touches_lower:
                 signals[symbol] = 'BB_LOWER_BUY'
+                long_positions.append(symbol)
             elif touches_upper or near_middle:
                 signals[symbol] = 'BB_EXIT'
             else:
@@ -1143,6 +1150,7 @@ def bollinger_mean_reversion(
                 if symbol in positions and hasattr(positions[symbol], 'quantity'):
                     if positions[symbol].quantity > 0:
                         signals[symbol] = 'BB_HOLD'
+                        long_positions.append(symbol)
                     else:
                         signals[symbol] = 'NEUTRAL'
                 else:
@@ -1227,6 +1235,8 @@ def adx_trend_filter(
 
     orders = {}
     signals = {}
+    long_positions = []
+    short_positions = []
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -1256,9 +1266,11 @@ def adx_trend_filter(
             if strong_trend:
                 if plus_di > minus_di:
                     signals[symbol] = 'ADX_LONG_TREND'
+                    long_positions.append(symbol)
                 elif minus_di > plus_di:
                     if allow_short:
                         signals[symbol] = 'ADX_SHORT_TREND'
+                        short_positions.append(symbol)
                     else:
                         signals[symbol] = 'ADX_BEARISH'
                 else:
