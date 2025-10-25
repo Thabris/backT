@@ -46,7 +46,7 @@ from backt.validation import CPCVValidator, CPCVConfig, ParameterGrid
 from backt.validation.overfitting import interpret_overfitting_metrics
 
 # Import all strategies from strategies module
-from strategies import momentum
+from strategies import momentum, aqr
 
 
 # ===== ETF Universe Data Structure =====
@@ -569,9 +569,14 @@ def get_available_strategies():
     """
     strategies = {}
 
+    # Import benchmark module
+    from strategies import benchmark
+
     # Get all strategy modules
     strategy_modules = {
+        'benchmark': benchmark,
         'momentum': momentum,
+        'aqr': aqr,
         # Add more modules here as they're created
     }
 
@@ -854,19 +859,41 @@ def render_strategy_sheet():
         st.error("No strategies found! Make sure strategies are properly defined in the strategies/ folder.")
         return
 
-    # Strategy selection - compact
-    strategy_names = list(strategies.keys())
-    selected_strategy_name = st.selectbox(
+    # Strategy selection - compact with categories
+    # Group strategies by module
+    strategies_by_module = {}
+    for name, info in strategies.items():
+        module = info['module']
+        if module not in strategies_by_module:
+            strategies_by_module[module] = []
+        strategies_by_module[module].append(name)
+
+    # Create formatted list with category headers
+    strategy_options = []
+    strategy_display_map = {}
+
+    for module in sorted(strategies_by_module.keys()):
+        module_label = module.upper()
+        for strategy_name in sorted(strategies_by_module[module]):
+            display_name = f"{module_label}: {strategy_name}"
+            strategy_options.append(display_name)
+            strategy_display_map[display_name] = strategy_name
+
+    selected_display = st.selectbox(
         "Strategy",
-        strategy_names,
-        format_func=lambda x: f"{x} - {strategies[x]['description'][:60]}...",
-        label_visibility="collapsed"
+        strategy_options,
+        label_visibility="collapsed",
+        help="Select a strategy to backtest"
     )
 
+    selected_strategy_name = strategy_display_map[selected_display]
     selected_strategy = strategies[selected_strategy_name]
 
+    # Show strategy description inline
+    st.caption(f"ℹ️ {selected_strategy['description']}")
+
     # Show strategy documentation - compact
-    with st.expander("📖 Docs", expanded=False):
+    with st.expander("📖 Full Documentation", expanded=False):
         st.caption(f"**Module:** `strategies.{selected_strategy['module']}` | **Function:** `{selected_strategy_name}`")
         if selected_strategy['docstring']:
             st.code(selected_strategy['docstring'], language='text')
