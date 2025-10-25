@@ -97,8 +97,11 @@ class MetricsEngine(LoggerMixin):
             equity_array = equity.values
             returns_array = returns.values
 
+            # Calculate actual years from timestamps
+            years = (equity_curve.index[-1] - equity_curve.index[0]).days / 365.25
+
             total_return, cagr, volatility, best_day, worst_day = calculate_return_stats_fast(
-                equity_array, periods_per_year
+                equity_array, years
             )
 
             sharpe_ratio = calculate_sharpe_ratio_fast(
@@ -118,7 +121,8 @@ class MetricsEngine(LoggerMixin):
             total_return = (final_equity - initial_equity) / initial_equity
 
             # CAGR (Compound Annual Growth Rate)
-            years = len(equity) / periods_per_year
+            # Use actual calendar time instead of data point count
+            years = (equity_curve.index[-1] - equity_curve.index[0]).days / 365.25
             if years > 0 and initial_equity > 0 and final_equity > 0:
                 cagr = (final_equity / initial_equity) ** (1 / years) - 1
             else:

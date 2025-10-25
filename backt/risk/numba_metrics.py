@@ -183,14 +183,14 @@ def calculate_var_cvar_fast(
 @jit(nopython=True, cache=True)
 def calculate_return_stats_fast(
     equity: np.ndarray,
-    periods_per_year: float
+    years: float
 ) -> Tuple[float, float, float, float]:
     """
     Fast calculation of basic return statistics using Numba JIT
 
     Args:
         equity: Array of equity values
-        periods_per_year: Number of periods per year
+        years: Actual number of years (calculated from timestamps)
 
     Returns:
         Tuple of (total_return, cagr, annualized_vol, best_day, worst_day)
@@ -204,8 +204,7 @@ def calculate_return_stats_fast(
     # Total return
     total_return = (final - initial) / initial if initial > 0 else 0.0
 
-    # CAGR
-    years = len(equity) / periods_per_year
+    # CAGR - using actual calendar years passed as parameter
     if years > 0 and initial > 0 and final > 0:
         cagr = (final / initial) ** (1 / years) - 1
     else:
@@ -220,6 +219,8 @@ def calculate_return_stats_fast(
             returns[i-1] = 0.0
 
     if len(returns) > 0:
+        # Calculate periods per year from actual data
+        periods_per_year = len(equity) / years if years > 0 else 252.0
         volatility = np.std(returns) * np.sqrt(periods_per_year)
         best_day = np.max(returns)
         worst_day = np.min(returns)
