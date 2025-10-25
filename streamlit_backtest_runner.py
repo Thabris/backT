@@ -859,7 +859,7 @@ def render_strategy_sheet():
         st.error("No strategies found! Make sure strategies are properly defined in the strategies/ folder.")
         return
 
-    # Strategy selection - compact with categories
+    # Strategy selection - two-tier system to avoid dropdown overflow
     # Group strategies by module
     strategies_by_module = {}
     for name, info in strategies.items():
@@ -868,25 +868,34 @@ def render_strategy_sheet():
             strategies_by_module[module] = []
         strategies_by_module[module].append(name)
 
-    # Create formatted list with category headers
-    strategy_options = []
-    strategy_display_map = {}
+    # Sort modules and put benchmark first
+    module_order = ['benchmark', 'momentum', 'aqr']
+    available_modules = [m for m in module_order if m in strategies_by_module]
 
-    for module in sorted(strategies_by_module.keys()):
-        module_label = module.upper()
-        for strategy_name in sorted(strategies_by_module[module]):
-            display_name = f"{module_label}: {strategy_name}"
-            strategy_options.append(display_name)
-            strategy_display_map[display_name] = strategy_name
+    # Step 1: Category selection using radio buttons
+    col1, col2 = st.columns([1, 3])
 
-    selected_display = st.selectbox(
-        "Strategy",
-        strategy_options,
-        label_visibility="collapsed",
-        help="Select a strategy to backtest"
-    )
+    with col1:
+        st.caption("**Category**")
+        selected_module = st.radio(
+            "Category",
+            available_modules,
+            format_func=lambda x: x.upper(),
+            label_visibility="collapsed"
+        )
 
-    selected_strategy_name = strategy_display_map[selected_display]
+    with col2:
+        st.caption("**Strategy**")
+        # Step 2: Strategy selection from chosen category
+        strategies_in_module = sorted(strategies_by_module[selected_module])
+
+        selected_strategy_name = st.selectbox(
+            "Strategy",
+            strategies_in_module,
+            label_visibility="collapsed",
+            help=f"Select a {selected_module} strategy"
+        )
+
     selected_strategy = strategies[selected_strategy_name]
 
     # Show strategy description inline
