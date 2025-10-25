@@ -45,6 +45,43 @@ class StrategyHelpers:
         return target_value / current_price if current_price > 0 else 0
 
     @staticmethod
+    def calculate_equal_allocation(
+        portfolio_value: float,
+        symbols: list,
+        current_prices: Dict[str, float],
+        max_position_size: float = 1.0
+    ) -> Dict[str, float]:
+        """
+        Calculate equal 1/N allocation for each symbol
+
+        Args:
+            portfolio_value: Total portfolio value
+            symbols: List of symbols to allocate to
+            current_prices: Current price for each symbol
+            max_position_size: Maximum weight per position (0-1), default 1.0 (no limit)
+
+        Returns:
+            Dictionary mapping symbol to number of shares for equal allocation
+        """
+        n_symbols = len(symbols)
+        if n_symbols == 0:
+            return {}
+
+        # Equal weight per symbol (1/N), but respect max_position_size
+        weight_per_symbol = min(1.0 / n_symbols, max_position_size)
+        allocation_per_symbol = portfolio_value * weight_per_symbol
+
+        position_sizes = {}
+        for symbol in symbols:
+            if symbol in current_prices and current_prices[symbol] > 0:
+                shares = allocation_per_symbol / current_prices[symbol]
+                position_sizes[symbol] = shares
+            else:
+                position_sizes[symbol] = 0.0
+
+        return position_sizes
+
+    @staticmethod
     def is_crossover(series1: pd.Series, series2: pd.Series) -> bool:
         """Check if series1 crossed over series2 in the last period"""
         if len(series1) < 2 or len(series2) < 2:

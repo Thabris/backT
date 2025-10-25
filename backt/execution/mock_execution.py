@@ -127,6 +127,22 @@ class MockExecutionEngine(ExecutionEngine, LoggerMixin):
             target_qty = self._weight_to_quantity(weight, current_price, portfolio_value)
             qty_to_trade = target_qty - position.qty
 
+            # Log rebalancing details for debugging (disabled to avoid spam)
+            if False and abs(qty_to_trade) > 0.01:
+                position_value = position.qty * current_price if position.qty != 0 else 0
+                current_weight = (position_value / portfolio_value) if portfolio_value > 0 else 0
+                target_value = weight * portfolio_value
+                weight_drift = current_weight - weight
+
+                self.logger.info(
+                    f"📊 REBALANCE {symbol} @ {current_time.strftime('%Y-%m-%d')}: "
+                    f"Portfolio=${portfolio_value:,.0f} | "
+                    f"Current: {position.qty:.2f} sh (${position_value:,.0f}, {current_weight:.2%}) | "
+                    f"Target: {target_qty:.2f} sh (${target_value:,.0f}, {weight:.2%}) | "
+                    f"Drift: {weight_drift:+.2%} | "
+                    f"Trade: {qty_to_trade:+.2f} sh"
+                )
+
         elif action == CLOSE_ACTION:
             qty_to_trade = -position.qty
 
@@ -171,21 +187,33 @@ class MockExecutionEngine(ExecutionEngine, LoggerMixin):
             order, current_bar, qty_to_trade
         )
 
-        # Calculate slippage
+        # Calculate slippage (returns total $ amount)
         slippage = self.calculate_slippage(
             symbol, qty_to_trade, execution_price, market_data
         )
 
-        # Adjust price for slippage
+        # Convert slippage to per-share amount and adjust execution price
+        slippage_per_share = slippage / abs(qty_to_trade) if qty_to_trade != 0 else 0
         if qty_to_trade > 0:  # buying
-            final_price = execution_price + slippage
+            final_price = execution_price + slippage_per_share
         else:  # selling
-            final_price = execution_price - slippage
+            final_price = execution_price - slippage_per_share
 
         # Calculate commission
         commission = self.calculate_commission(symbol, abs(qty_to_trade), final_price)
 
-        # Create fill
+        # Create fill with merged metadata
+        # Start with execution metadata
+        fill_meta = {
+            "order_type": order.get('order_type', 'market'),
+            "original_action": action,
+            "execution_method": "mock"
+        }
+
+        # Merge order metadata (strategy reasons, signals, etc.)
+        if 'meta' in order and order['meta'] is not None:
+            fill_meta.update(order['meta'])
+
         fill = Fill(
             symbol=symbol,
             filled_qty=qty_to_trade,
@@ -195,11 +223,7 @@ class MockExecutionEngine(ExecutionEngine, LoggerMixin):
             timestamp=current_time,
             order_id=self._generate_order_id(),
             side="buy" if qty_to_trade > 0 else "sell",
-            meta={
-                "order_type": order.get('order_type', 'market'),
-                "original_action": action,
-                "execution_method": "mock"
-            }
+            meta=fill_meta
         )
 
         self.logger.debug(
@@ -357,26 +381,8 @@ class MockExecutionEngine(ExecutionEngine, LoggerMixin):
         Returns:
             True if within limits, False if violated
         """
-        # Get max_position_size from portfolio manager config
-        if self.portfolio_manager is None:
-            return True  # No risk limits without portfolio manager
-
-        max_position_size = self.portfolio_manager.config.max_position_size
-        if max_position_size is None or max_position_size <= 0:
-            return True  # No limit set
-
-        # Calculate proposed position value
-        proposed_value = abs(proposed_qty * current_price)
-        max_position_value = max_position_size * portfolio_value
-
-        if proposed_value > max_position_value:
-            self.logger.debug(
-                f"Position size limit exceeded for {symbol}: "
-                f"Proposed ${proposed_value:,.0f} > Max ${max_position_value:,.0f} "
-                f"({max_position_size*100:.0f}% of ${portfolio_value:,.0f})"
-            )
-            return False
-
+        # Position size limits are disabled at portfolio level
+        # Strategies control their own position sizing via target_weight
         return True
 
     def _check_global_risk_limits(

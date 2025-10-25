@@ -15,7 +15,7 @@ All strategies follow the standard BackT strategy signature.
 
 from typing import Dict, Any
 import pandas as pd
-from backt.signal import TechnicalIndicators
+from backt.signal import TechnicalIndicators, StrategyHelpers
 from backt.signal.kalman import KalmanFilter1D
 
 
@@ -33,7 +33,7 @@ def ma_crossover_long_only(
     - Calculate short-term (fast) and long-term (slow) moving averages
     - LONG when fast MA crosses above slow MA (golden cross)
     - CASH when fast MA crosses below slow MA (death cross)
-    - Equal weight allocation across selected positions
+    - Each symbol gets equal allocation (1/N) of portfolio value
 
     Parameters:
     -----------
@@ -43,8 +43,6 @@ def ma_crossover_long_only(
         Long-term moving average period
     min_periods : int, default=60
         Minimum data points required
-    max_position_size : float, default=0.25
-        Maximum weight per position (0.0 to 1.0)
 
     Returns:
     --------
@@ -53,7 +51,7 @@ def ma_crossover_long_only(
 
     Example:
     --------
-    >>> params = {'fast_ma': 20, 'slow_ma': 50, 'max_position_size': 0.25}
+    >>> params = {'fast_ma': 20, 'slow_ma': 50}
     >>> result = backtester.run(
     ...     strategy=ma_crossover_long_only,
     ...     universe=['SPY', 'QQQ'],
@@ -64,11 +62,9 @@ def ma_crossover_long_only(
     fast_ma = params.get('fast_ma', 20)
     slow_ma = params.get('slow_ma', 50)
     min_periods = params.get('min_periods', 60)
-    max_position_size = params.get('max_position_size', 0.25)
 
     orders = {}
     signals = {}
-    long_positions = []
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -93,49 +89,93 @@ def ma_crossover_long_only(
             golden_cross = (prev_fast <= prev_slow) and (current_fast > current_slow)
             death_cross = (prev_fast >= prev_slow) and (current_fast < current_slow)
 
-            # Generate signals - LONG ONLY
+            # Store MA values for logging
+            context.setdefault('ma_values', {})[symbol] = {
+                'fast_ma': current_fast,
+                'slow_ma': current_slow
+            }
+
+            # Generate signals - LONG ONLY with reasons
             if golden_cross:
-                signals[symbol] = 'BUY'
-                long_positions.append(symbol)
+                signals[symbol] = {
+                    'action': 'BUY',
+                    'reason': f'Golden cross: Fast MA ({current_fast:.2f}) crossed above Slow MA ({current_slow:.2f})'
+                }
             elif death_cross:
-                signals[symbol] = 'SELL'
+                signals[symbol] = {
+                    'action': 'SELL',
+                    'reason': f'Death cross: Fast MA ({current_fast:.2f}) crossed below Slow MA ({current_slow:.2f})'
+                }
                 # Don't add to long_positions (go to cash)
             elif current_fast > current_slow:
-                signals[symbol] = 'HOLD_LONG'
-                long_positions.append(symbol)
+                signals[symbol] = {
+                    'action': 'HOLD_LONG',
+                    'reason': f'Bullish trend: Fast MA ({current_fast:.2f}) > Slow MA ({current_slow:.2f})'
+                }
             else:
-                signals[symbol] = 'NEUTRAL'
+                signals[symbol] = {
+                    'action': 'NEUTRAL',
+                    'reason': f'Bearish trend: Fast MA ({current_fast:.2f}) < Slow MA ({current_slow:.2f})'
+                }
                 # Stay in cash
 
         except Exception as e:
             continue
 
-    # Calculate position sizing
-    total_positions = len(long_positions)
+    # Calculate target weight ONCE (stored in context for consistency)
+    if 'target_weights' not in context:
+        # Calculate equal 1/N weight for each symbol
+        # Each symbol gets equal share of portfolio: 100% / N symbols
+        n_symbols = len(market_data.keys())
+        if n_symbols > 0:
+            weight_per_symbol = 1.0 / n_symbols
+            context['target_weights'] = {symbol: weight_per_symbol for symbol in market_data.keys()}
+        else:
+            context['target_weights'] = {}
 
-    if total_positions > 0:
-        # Equal weight allocation, but respect max position size
-        weight_per_position = min(1.0 / total_positions, max_position_size)
+    # Create orders ONLY on signal changes (entry/exit), NOT on hold
+    for symbol in market_data.keys():
+        signal_info = signals.get(symbol, {})
+        signal_action = signal_info.get('action', 'UNKNOWN')
 
-        # Create LONG orders
-        for symbol in long_positions:
+        # Check current position safely
+        if symbol in positions and positions[symbol] is not None:
+            current_qty = positions[symbol].qty
+        else:
+            current_qty = 0.0
+
+        has_position = abs(current_qty) > 1e-8
+
+        # ENTRY SIGNAL - Buy on golden cross
+        if signal_action == 'BUY' and not has_position:
             orders[symbol] = {
                 'action': 'target_weight',
-                'weight': weight_per_position
+                'weight': context['target_weights'].get(symbol, 0),
+                'meta': {
+                    'reason': "Enter long: " + signal_info.get('reason', 'Golden cross'),
+                    'signal': signal_action,
+                    'fast_ma': context['ma_values'][symbol]['fast_ma'],
+                    'slow_ma': context['ma_values'][symbol]['slow_ma']
+                }
             }
 
-    # Close positions for assets with no signal
-    for symbol in market_data.keys():
-        if symbol not in long_positions:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
-                    orders[symbol] = {'action': 'close'}
+        # EXIT SIGNAL - Close on death cross
+        elif signal_action == 'SELL' and has_position:
+            orders[symbol] = {
+                'action': 'close',
+                'meta': {
+                    'reason': "Exit long: " + signal_info.get('reason', 'Death cross'),
+                    'signal': signal_action,
+                    'fast_ma': context['ma_values'][symbol]['fast_ma'],
+                    'slow_ma': context['ma_values'][symbol]['slow_ma']
+                }
+            }
+
+        # HOLD SIGNAL - No order, let position drift naturally
+        # (HOLD_LONG - do nothing)
 
     # Store strategy state for analysis
     context['signals'] = signals
-    context['long_positions'] = long_positions
-    context['total_positions'] = total_positions
-    context['position_weight'] = weight_per_position if total_positions > 0 else 0
 
     return orders
 
@@ -154,7 +194,7 @@ def ma_crossover_long_short(
     - Calculate short-term (fast) and long-term (slow) moving averages
     - LONG when fast MA crosses above slow MA (golden cross)
     - SHORT when fast MA crosses below slow MA (death cross)
-    - Equal weight allocation across selected positions (long and short)
+    - Each symbol gets equal allocation (1/N) of portfolio value
 
     Key Differences from Long-Only:
     - Goes SHORT instead of cash on death crosses
@@ -169,8 +209,6 @@ def ma_crossover_long_short(
         Long-term moving average period
     min_periods : int, default=60
         Minimum data points required
-    max_position_size : float, default=0.25
-        Maximum weight per position (0.0 to 1.0)
 
     Returns:
     --------
@@ -179,7 +217,7 @@ def ma_crossover_long_short(
 
     Example:
     --------
-    >>> params = {'fast_ma': 20, 'slow_ma': 50, 'max_position_size': 0.25}
+    >>> params = {'fast_ma': 20, 'slow_ma': 50}
     >>> result = backtester.run(
     ...     strategy=ma_crossover_long_short,
     ...     universe=['SPY', 'QQQ'],
@@ -190,12 +228,9 @@ def ma_crossover_long_short(
     fast_ma = params.get('fast_ma', 20)
     slow_ma = params.get('slow_ma', 50)
     min_periods = params.get('min_periods', 60)
-    max_position_size = params.get('max_position_size', 0.25)
 
     orders = {}
     signals = {}
-    long_positions = []
-    short_positions = []
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -223,13 +258,11 @@ def ma_crossover_long_short(
             # Generate signals - KEY DIFFERENCE: SHORT on death cross
             if golden_cross:
                 signals[symbol] = 'BUY'
-                long_positions.append(symbol)
             elif death_cross:
                 signals[symbol] = 'SELL_SHORT'
                 short_positions.append(symbol)
             elif current_fast > current_slow:
                 signals[symbol] = 'HOLD_LONG'
-                long_positions.append(symbol)
             else:
                 signals[symbol] = 'HOLD_SHORT'
                 short_positions.append(symbol)
@@ -241,8 +274,8 @@ def ma_crossover_long_short(
     total_positions = len(long_positions) + len(short_positions)
 
     if total_positions > 0:
-        # Equal weight allocation, but respect max position size
-        weight_per_position = min(1.0 / total_positions, max_position_size)
+        # Equal weight allocation (1/N)
+        weight_per_position = 1.0 / total_positions
 
         # Create LONG orders
         for symbol in long_positions:
@@ -292,7 +325,7 @@ def kalman_ma_crossover_long_only(
     - Two filters with different Q parameters act as fast/slow signals
     - LONG when fast Kalman > slow Kalman (trend confirmation)
     - CASH when fast Kalman < slow Kalman (downtrend)
-    - Equal weight allocation across selected positions
+    - Each symbol gets equal allocation (1/N) of portfolio value
 
     Key Advantages of Kalman Filters:
     - Superior noise reduction without lag
@@ -310,8 +343,6 @@ def kalman_ma_crossover_long_only(
         Measurement noise (standard)
     min_periods : int, default=60
         Minimum data points required
-    max_position_size : float, default=0.25
-        Maximum weight per position (0.0 to 1.0)
 
     Returns:
     --------
@@ -332,7 +363,6 @@ def kalman_ma_crossover_long_only(
     Q_slow = params.get('Q_slow', 0.001)
     R = params.get('R', 1.0)
     min_periods = params.get('min_periods', 60)
-    max_position_size = params.get('max_position_size', 0.25)
 
     # Initialize Kalman filters in context if not already present
     if 'kalman_filters' not in context:
@@ -372,13 +402,11 @@ def kalman_ma_crossover_long_only(
             # Generate signals - LONG ONLY
             if golden_cross:
                 signals[symbol] = 'BUY'
-                long_positions.append(symbol)
             elif death_cross:
                 signals[symbol] = 'SELL'
                 # Go to cash
             elif current_fast > current_slow:
                 signals[symbol] = 'HOLD_LONG'
-                long_positions.append(symbol)
             else:
                 signals[symbol] = 'NEUTRAL'
                 # Stay in cash
@@ -390,8 +418,8 @@ def kalman_ma_crossover_long_only(
     total_positions = len(long_positions)
 
     if total_positions > 0:
-        # Equal weight allocation, but respect max position size
-        weight_per_position = min(1.0 / total_positions, max_position_size)
+        # Equal weight allocation (1/N)
+        weight_per_position = 1.0 / total_positions
 
         # Create LONG orders
         for symbol in long_positions:
@@ -409,9 +437,6 @@ def kalman_ma_crossover_long_only(
 
     # Store strategy state for analysis
     context['signals'] = signals
-    context['long_positions'] = long_positions
-    context['total_positions'] = total_positions
-    context['position_weight'] = weight_per_position if total_positions > 0 else 0
 
     return orders
 
@@ -431,7 +456,7 @@ def kalman_ma_crossover_long_short(
     - Two filters with different Q parameters act as fast/slow signals
     - LONG when fast Kalman > slow Kalman (trend confirmation)
     - SHORT when fast Kalman < slow Kalman (downtrend confirmation)
-    - Equal weight allocation across selected positions (long and short)
+    - Each symbol gets equal allocation (1/N) of portfolio value
 
     Key Advantages of Kalman Filters:
     - Superior noise reduction without lag
@@ -449,8 +474,6 @@ def kalman_ma_crossover_long_short(
         Measurement noise (standard)
     min_periods : int, default=60
         Minimum data points required
-    max_position_size : float, default=0.25
-        Maximum weight per position (0.0 to 1.0)
 
     Returns:
     --------
@@ -471,7 +494,6 @@ def kalman_ma_crossover_long_short(
     Q_slow = params.get('Q_slow', 0.001)
     R = params.get('R', 1.0)
     min_periods = params.get('min_periods', 60)
-    max_position_size = params.get('max_position_size', 0.25)
 
     # Initialize Kalman filters in context if not already present
     if 'kalman_filters' not in context:
@@ -479,8 +501,6 @@ def kalman_ma_crossover_long_short(
 
     orders = {}
     signals = {}
-    long_positions = []
-    short_positions = []
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -511,13 +531,11 @@ def kalman_ma_crossover_long_short(
             # Generate signals - SHORT on death cross, LONG on golden cross
             if golden_cross:
                 signals[symbol] = 'BUY'
-                long_positions.append(symbol)
             elif death_cross:
                 signals[symbol] = 'SELL_SHORT'
                 short_positions.append(symbol)
             elif current_fast > current_slow:
                 signals[symbol] = 'HOLD_LONG'
-                long_positions.append(symbol)
             else:
                 signals[symbol] = 'HOLD_SHORT'
                 short_positions.append(symbol)
@@ -529,8 +547,8 @@ def kalman_ma_crossover_long_short(
     total_positions = len(long_positions) + len(short_positions)
 
     if total_positions > 0:
-        # Equal weight allocation, but respect max position size
-        weight_per_position = min(1.0 / total_positions, max_position_size)
+        # Equal weight allocation (1/N)
+        weight_per_position = 1.0 / total_positions
 
         # Create LONG orders
         for symbol in long_positions:
@@ -579,7 +597,7 @@ def rsi_mean_reversion(
     Logic:
     - BUY when RSI < oversold_threshold (asset is oversold)
     - SELL when RSI > overbought_threshold (asset is overbought)
-    - Equal weight allocation across selected positions
+    - Each symbol gets equal allocation (1/N) of portfolio value
 
     Parameters:
     -----------
@@ -591,8 +609,6 @@ def rsi_mean_reversion(
         RSI level considered overbought (sell signal)
     min_periods : int, default=30
         Minimum data points required
-    max_position_size : float, default=0.25
-        Maximum weight per position (0.0 to 1.0)
 
     Returns:
     --------
@@ -613,7 +629,6 @@ def rsi_mean_reversion(
     oversold = params.get('oversold_threshold', 30)
     overbought = params.get('overbought_threshold', 70)
     min_periods = params.get('min_periods', 30)
-    max_position_size = params.get('max_position_size', 0.25)
 
     orders = {}
     signals = {}
@@ -636,7 +651,6 @@ def rsi_mean_reversion(
             # Generate signals based on RSI levels
             if current_rsi < oversold:
                 signals[symbol] = 'OVERSOLD_BUY'
-                long_positions.append(symbol)
             elif current_rsi > overbought:
                 signals[symbol] = 'OVERBOUGHT_SELL'
                 # Exit position
@@ -646,7 +660,6 @@ def rsi_mean_reversion(
                     if positions[symbol].quantity > 0:
                         # Hold position until overbought
                         signals[symbol] = 'HOLD'
-                        long_positions.append(symbol)
                     else:
                         signals[symbol] = 'NEUTRAL'
                 else:
@@ -659,7 +672,7 @@ def rsi_mean_reversion(
     total_positions = len(long_positions)
 
     if total_positions > 0:
-        weight_per_position = min(1.0 / total_positions, max_position_size)
+        weight_per_position = 1.0 / total_positions
 
         for symbol in long_positions:
             orders[symbol] = {
@@ -696,19 +709,18 @@ def macd_crossover(
     - BUY when MACD line crosses above signal line (bullish crossover)
     - SELL when MACD line crosses below signal line (bearish crossover)
     - Can trade long-only or long-short based on allow_short parameter
+    - Each symbol gets equal allocation (1/N) of portfolio value
 
     Parameters:
     -----------
-    fast_period : int, default=12
+    fast_period : int, default=11
         Fast EMA period for MACD
-    slow_period : int, default=26
+    slow_period : int, default=20
         Slow EMA period for MACD
-    signal_period : int, default=9
+    signal_period : int, default=10
         Signal line EMA period
     min_periods : int, default=35
         Minimum data points required
-    max_position_size : float, default=0.25
-        Maximum weight per position (0.0 to 1.0)
     allow_short : bool, default=False
         If True, go short on bearish crossover; if False, go to cash
 
@@ -719,7 +731,7 @@ def macd_crossover(
 
     Example:
     --------
-    >>> params = {'fast_period': 12, 'slow_period': 26, 'signal_period': 9, 'allow_short': True}
+    >>> params = {'fast_period': 11, 'slow_period': 20, 'signal_period': 10, 'allow_short': True}
     >>> result = backtester.run(
     ...     strategy=macd_crossover,
     ...     universe=['SPY', 'QQQ'],
@@ -727,17 +739,14 @@ def macd_crossover(
     ... )
     """
     # Strategy parameters
-    fast_period = params.get('fast_period', 12)
-    slow_period = params.get('slow_period', 26)
-    signal_period = params.get('signal_period', 9)
+    fast_period = params.get('fast_period', 11)
+    slow_period = params.get('slow_period', 20)
+    signal_period = params.get('signal_period', 10)
     min_periods = params.get('min_periods', 35)
-    max_position_size = params.get('max_position_size', 0.25)
     allow_short = params.get('allow_short', False)
 
     orders = {}
     signals = {}
-    long_positions = []
-    short_positions = []
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -765,61 +774,162 @@ def macd_crossover(
             bullish_cross = (prev_macd <= prev_signal) and (current_macd > current_signal)
             bearish_cross = (prev_macd >= prev_signal) and (current_macd < current_signal)
 
-            # Generate signals
+            # Store signal values for logging
+            context.setdefault('macd_values', {})[symbol] = {
+                'macd': current_macd,
+                'signal': current_signal,
+                'histogram': macd_data['histogram'].iloc[-1]
+            }
+
+            # Generate signals with reasons
             if bullish_cross:
-                signals[symbol] = 'MACD_BUY'
-                long_positions.append(symbol)
+                signals[symbol] = {
+                    'action': 'MACD_BUY',
+                    'reason': f'MACD bullish crossover (MACD: {current_macd:.4f} > Signal: {current_signal:.4f})'
+                }
             elif bearish_cross:
                 if allow_short:
-                    signals[symbol] = 'MACD_SELL_SHORT'
-                    short_positions.append(symbol)
+                    signals[symbol] = {
+                        'action': 'MACD_SELL_SHORT',
+                        'reason': f'MACD bearish crossover (MACD: {current_macd:.4f} < Signal: {current_signal:.4f})'
+                    }
                 else:
-                    signals[symbol] = 'MACD_SELL'
+                    signals[symbol] = {
+                        'action': 'MACD_SELL',
+                        'reason': f'MACD bearish crossover (MACD: {current_macd:.4f} < Signal: {current_signal:.4f})'
+                    }
             elif current_macd > current_signal:
-                signals[symbol] = 'MACD_HOLD_LONG'
-                long_positions.append(symbol)
+                signals[symbol] = {
+                    'action': 'MACD_HOLD_LONG',
+                    'reason': f'MACD above signal (MACD: {current_macd:.4f} > Signal: {current_signal:.4f})'
+                }
             elif current_macd < current_signal and allow_short:
-                signals[symbol] = 'MACD_HOLD_SHORT'
+                signals[symbol] = {
+                    'action': 'MACD_HOLD_SHORT',
+                    'reason': f'MACD below signal (MACD: {current_macd:.4f} < Signal: {current_signal:.4f})'
+                }
                 short_positions.append(symbol)
             else:
-                signals[symbol] = 'NEUTRAL'
+                signals[symbol] = {
+                    'action': 'NEUTRAL',
+                    'reason': 'No MACD signal'
+                }
 
         except Exception as e:
             continue
 
-    # Calculate position sizing
-    total_positions = len(long_positions) + len(short_positions)
+    # Calculate target weight ONCE (stored in context for consistency)
+    if 'target_weights' not in context:
+        # Calculate equal 1/N weight for each symbol
+        # Each symbol gets equal share of portfolio: 100% / N symbols
+        n_symbols = len(market_data.keys())
+        if n_symbols > 0:
+            weight_per_symbol = 1.0 / n_symbols
+            context['target_weights'] = {symbol: weight_per_symbol for symbol in market_data.keys()}
+        else:
+            context['target_weights'] = {}
 
-    if total_positions > 0:
-        weight_per_position = min(1.0 / total_positions, max_position_size)
+        context['initial_allocation_done'] = True
 
-        # Long orders
-        for symbol in long_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': weight_per_position
-            }
-
-        # Short orders
-        for symbol in short_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': -weight_per_position
-            }
-
-    # Close positions not in active positions
-    active_positions = long_positions + short_positions
+    # Create orders ONLY on signal changes (entry/exit), NOT on hold
     for symbol in market_data.keys():
-        if symbol not in active_positions:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
-                    orders[symbol] = {'action': 'close'}
+        signal_info = signals.get(symbol, {})
+        if not isinstance(signal_info, dict):
+            continue
+
+        signal_action = signal_info.get('action', 'UNKNOWN')
+
+        # Check current position safely
+        if symbol in positions and positions[symbol] is not None:
+            current_qty = positions[symbol].qty
+        else:
+            current_qty = 0.0
+
+        has_position = abs(current_qty) > 1e-8
+
+        # ENTRY SIGNALS - Buy/Short when crossing over
+        if signal_action == 'MACD_BUY' and not has_position:
+            # Enter long position using target_weight (scales with portfolio growth)
+            orders[symbol] = {
+                'action': 'target_weight',
+                'weight': context['target_weights'].get(symbol, 0),
+                'meta': {
+                    'reason': "Enter long: " + signal_info.get('reason', 'MACD bullish'),
+                    'signal': signal_action,
+                    'macd': context['macd_values'][symbol]['macd'],
+                    'signal_line': context['macd_values'][symbol]['signal'],
+                    'histogram': context['macd_values'][symbol]['histogram']
+                }
+            }
+
+        elif signal_action == 'MACD_SELL_SHORT' and allow_short and not has_position:
+            # Enter short position using target_weight (negative weight for shorts)
+            orders[symbol] = {
+                'action': 'target_weight',
+                'weight': -context['target_weights'].get(symbol, 0),  # Negative for short
+                'meta': {
+                    'reason': "Enter short: " + signal_info.get('reason', 'MACD bearish'),
+                    'signal': signal_action,
+                    'macd': context['macd_values'][symbol]['macd'],
+                    'signal_line': context['macd_values'][symbol]['signal'],
+                    'histogram': context['macd_values'][symbol]['histogram']
+                }
+            }
+
+        # EXIT SIGNALS - Close position when signal changes
+        elif signal_action == 'MACD_SELL' and has_position and current_qty > 0:
+            # Exit long position (long-only mode)
+            orders[symbol] = {
+                'action': 'close',
+                'meta': {
+                    'reason': "Exit long: " + signal_info.get('reason', 'MACD bearish crossover'),
+                    'signal': signal_action,
+                    'macd': context['macd_values'][symbol]['macd'],
+                    'signal_line': context['macd_values'][symbol]['signal']
+                }
+            }
+
+        elif signal_action == 'MACD_BUY' and has_position and current_qty < 0:
+            # Close short and go long
+            orders[symbol] = {
+                'action': 'close',
+                'meta': {
+                    'reason': "Exit short: " + signal_info.get('reason', 'MACD bullish crossover'),
+                    'signal': 'EXIT_SHORT',
+                    'macd': context['macd_values'][symbol]['macd'],
+                    'signal_line': context['macd_values'][symbol]['signal']
+                }
+            }
+            # Will enter long on next iteration
+
+        elif signal_action == 'MACD_SELL_SHORT' and has_position and current_qty > 0 and allow_short:
+            # Close long and go short
+            orders[symbol] = {
+                'action': 'close',
+                'meta': {
+                    'reason': "Exit long: " + signal_info.get('reason', 'MACD bearish crossover'),
+                    'signal': 'EXIT_LONG',
+                    'macd': context['macd_values'][symbol]['macd'],
+                    'signal_line': context['macd_values'][symbol]['signal']
+                }
+            }
+            # Will enter short on next iteration
+
+        elif signal_action == 'NEUTRAL' and has_position:
+            # Exit on neutral signal
+            orders[symbol] = {
+                'action': 'close',
+                'meta': {
+                    'reason': "Exit position: " + signal_info.get('reason', 'No signal'),
+                    'signal': 'EXIT'
+                }
+            }
+
+        # HOLD SIGNALS - No order, let position drift naturally
+        # (MACD_HOLD_LONG, MACD_HOLD_SHORT - do nothing)
 
     # Store strategy state
     context['signals'] = signals
-    context['long_positions'] = long_positions
-    context['short_positions'] = short_positions
-    context['total_positions'] = total_positions
 
     return orders
 
@@ -837,7 +947,7 @@ def stochastic_momentum(
     Logic:
     - BUY when %K crosses above %D in oversold territory (< 20)
     - SELL when %K crosses below %D in overbought territory (> 80)
-    - Equal weight allocation across selected positions
+    - Each symbol gets equal allocation (1/N) of portfolio value
 
     Parameters:
     -----------
@@ -853,8 +963,6 @@ def stochastic_momentum(
         Overbought level
     min_periods : int, default=30
         Minimum data points required
-    max_position_size : float, default=0.25
-        Maximum weight per position (0.0 to 1.0)
 
     Returns:
     --------
@@ -877,7 +985,6 @@ def stochastic_momentum(
     oversold = params.get('oversold', 20)
     overbought = params.get('overbought', 80)
     min_periods = params.get('min_periods', 30)
-    max_position_size = params.get('max_position_size', 0.25)
 
     orders = {}
     signals = {}
@@ -914,13 +1021,11 @@ def stochastic_momentum(
             # Generate signals
             if bullish_cross:
                 signals[symbol] = 'STOCH_OVERSOLD_BUY'
-                long_positions.append(symbol)
             elif bearish_cross:
                 signals[symbol] = 'STOCH_OVERBOUGHT_SELL'
             elif current_k > current_d and current_k < overbought:
                 # Hold long position if still bullish
                 signals[symbol] = 'STOCH_HOLD'
-                long_positions.append(symbol)
             else:
                 signals[symbol] = 'NEUTRAL'
 
@@ -931,7 +1036,7 @@ def stochastic_momentum(
     total_positions = len(long_positions)
 
     if total_positions > 0:
-        weight_per_position = min(1.0 / total_positions, max_position_size)
+        weight_per_position = 1.0 / total_positions
 
         for symbol in long_positions:
             orders[symbol] = {
@@ -977,8 +1082,6 @@ def bollinger_mean_reversion(
         Number of standard deviations for bands
     min_periods : int, default=30
         Minimum data points required
-    max_position_size : float, default=0.25
-        Maximum weight per position (0.0 to 1.0)
 
     Returns:
     --------
@@ -998,7 +1101,6 @@ def bollinger_mean_reversion(
     bb_period = params.get('bb_period', 20)
     bb_std = params.get('bb_std', 2.0)
     min_periods = params.get('min_periods', 30)
-    max_position_size = params.get('max_position_size', 0.25)
 
     orders = {}
     signals = {}
@@ -1034,7 +1136,6 @@ def bollinger_mean_reversion(
             # Generate signals
             if touches_lower:
                 signals[symbol] = 'BB_LOWER_BUY'
-                long_positions.append(symbol)
             elif touches_upper or near_middle:
                 signals[symbol] = 'BB_EXIT'
             else:
@@ -1042,7 +1143,6 @@ def bollinger_mean_reversion(
                 if symbol in positions and hasattr(positions[symbol], 'quantity'):
                     if positions[symbol].quantity > 0:
                         signals[symbol] = 'BB_HOLD'
-                        long_positions.append(symbol)
                     else:
                         signals[symbol] = 'NEUTRAL'
                 else:
@@ -1055,7 +1155,7 @@ def bollinger_mean_reversion(
     total_positions = len(long_positions)
 
     if total_positions > 0:
-        weight_per_position = min(1.0 / total_positions, max_position_size)
+        weight_per_position = 1.0 / total_positions
 
         for symbol in long_positions:
             orders[symbol] = {
@@ -1102,8 +1202,6 @@ def adx_trend_filter(
         Minimum ADX for trend strength (25 = strong trend)
     min_periods : int, default=30
         Minimum data points required
-    max_position_size : float, default=0.25
-        Maximum weight per position (0.0 to 1.0)
     allow_short : bool, default=False
         If True, go short in bearish trends; if False, go to cash
 
@@ -1125,13 +1223,10 @@ def adx_trend_filter(
     adx_period = params.get('adx_period', 14)
     adx_threshold = params.get('adx_threshold', 25)
     min_periods = params.get('min_periods', 30)
-    max_position_size = params.get('max_position_size', 0.25)
     allow_short = params.get('allow_short', False)
 
     orders = {}
     signals = {}
-    long_positions = []
-    short_positions = []
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -1161,11 +1256,9 @@ def adx_trend_filter(
             if strong_trend:
                 if plus_di > minus_di:
                     signals[symbol] = 'ADX_LONG_TREND'
-                    long_positions.append(symbol)
                 elif minus_di > plus_di:
                     if allow_short:
                         signals[symbol] = 'ADX_SHORT_TREND'
-                        short_positions.append(symbol)
                     else:
                         signals[symbol] = 'ADX_BEARISH'
                 else:
@@ -1180,7 +1273,7 @@ def adx_trend_filter(
     total_positions = len(long_positions) + len(short_positions)
 
     if total_positions > 0:
-        weight_per_position = min(1.0 / total_positions, max_position_size)
+        weight_per_position = 1.0 / total_positions
 
         # Long orders
         for symbol in long_positions:
@@ -1206,8 +1299,5 @@ def adx_trend_filter(
 
     # Store strategy state
     context['signals'] = signals
-    context['long_positions'] = long_positions
-    context['short_positions'] = short_positions
-    context['total_positions'] = total_positions
 
     return orders

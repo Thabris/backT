@@ -125,6 +125,10 @@ class Backtester(LoggerMixin):
             if strategy_params is None:
                 strategy_params = {}
 
+            # Inject initial_capital into strategy params (for equal allocation)
+            if 'initial_capital' not in strategy_params:
+                strategy_params['initial_capital'] = self.config.initial_capital
+
             # Reset portfolio
             self.portfolio.reset()
             self.strategy_context.clear()

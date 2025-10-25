@@ -49,6 +49,144 @@ from backt.validation.overfitting import interpret_overfitting_metrics
 from strategies import momentum
 
 
+# ===== ETF Universe Data Structure =====
+
+ETF_UNIVERSE = {
+    "🏦 Equities - Broad Market": {
+        "SPY": "S&P 500",
+        "QQQ": "Nasdaq 100",
+        "IVV": "S&P 500 (iShares)",
+        "VOO": "S&P 500 (Vanguard)",
+        "MDY": "S&P Mid Cap 400",
+        "IJH": "S&P Mid Cap 400 (iShares)",
+        "IWM": "Russell 2000 Small Cap",
+        "VB": "Small Cap (Vanguard)",
+        "VGK": "Europe Stocks",
+        "IEV": "Europe 350",
+        "EEM": "Emerging Markets",
+        "VWO": "Emerging Markets (Vanguard)",
+        "EWJ": "Japan",
+        "FXI": "China Large Cap",
+        "MCHI": "China",
+        "EFA": "Developed ex-US",
+    },
+    "📊 Equities - Factor/Style": {
+        "VLUE": "Value Factor",
+        "IWD": "Value Large Cap",
+        "VTV": "Value (Vanguard)",
+        "MTUM": "Momentum Factor",
+        "QUAL": "Quality Factor",
+        "SPHQ": "Quality (Invesco)",
+        "USMV": "Low Volatility",
+        "SPLV": "Low Volatility (Invesco)",
+        "IJR": "Small Cap Value",
+        "VBK": "Small Cap Growth",
+        "LRGF": "Multifactor Large Cap",
+        "ACWF": "Multifactor Global",
+    },
+    "💰 Fixed Income": {
+        "AGG": "US Aggregate Bond",
+        "BND": "Total Bond Market",
+        "SHY": "1-3 Year Treasury",
+        "VGSH": "Short-Term Treasury",
+        "TLT": "20+ Year Treasury",
+        "IEF": "7-10 Year Treasury",
+        "TIP": "TIPS Inflation-Protected",
+        "SCHP": "TIPS (Schwab)",
+        "LQD": "Investment Grade Corporate",
+        "VCIT": "Intermediate Corporate",
+        "HYG": "High Yield Corporate",
+        "JNK": "High Yield (SPDR)",
+        "EMB": "Emerging Market Bond",
+        "VWOB": "Emerging Market Bond (Vanguard)",
+    },
+    "🪙 Commodities": {
+        "DBC": "Commodity Index",
+        "COMT": "Commodity Optimum Yield",
+        "GSG": "Commodity Broad",
+        "GLD": "Gold",
+        "IAU": "Gold (iShares)",
+        "SLV": "Silver",
+        "USO": "Crude Oil WTI",
+        "BNO": "Brent Crude",
+        "DBA": "Agriculture",
+        "DBB": "Industrial Metals",
+    },
+    "🌍 Currencies": {
+        "UUP": "US Dollar Bull",
+        "USDU": "US Dollar (WisdomTree)",
+        "FXE": "Euro",
+        "FXY": "Japanese Yen",
+        "FXB": "British Pound",
+        "CEW": "Emerging Market Currency",
+    },
+    "💹 Volatility": {
+        "VXX": "VIX Short-Term Futures",
+        "UVXY": "VIX 2x Leveraged",
+        "VIXM": "VIX Mid-Term Futures",
+        "TAIL": "Tail Risk Hedge",
+        "VQT": "Volatility Hedge",
+        "SVXY": "Short VIX",
+    },
+    "🧮 Alternative": {
+        "RPAR": "Risk Parity ETF",
+        "NTSX": "90/60 Stocks/Bonds",
+        "AOR": "Moderate Allocation",
+        "DBMF": "Managed Futures",
+        "KMLM": "Managed Futures (KFA)",
+        "FIG": "Global Macro",
+        "GVAL": "Global Value",
+        "TCTL": "Tactical Allocation",
+        "COM": "Commodity Trend",
+        "WDTI": "WisdomTree Trend",
+    },
+    "🧭 Sector": {
+        "XLK": "Technology",
+        "VGT": "Technology (Vanguard)",
+        "XLE": "Energy",
+        "VDE": "Energy (Vanguard)",
+        "XLF": "Financials",
+        "VFH": "Financials (Vanguard)",
+        "XLV": "Healthcare",
+        "VHT": "Healthcare (Vanguard)",
+        "XLI": "Industrials",
+        "VIS": "Industrials (Vanguard)",
+        "XLY": "Consumer Discretionary",
+        "VCR": "Consumer Discretionary (Vanguard)",
+        "XLU": "Utilities",
+        "VPU": "Utilities (Vanguard)",
+        "XLRE": "Real Estate",
+        "VNQ": "REIT (Vanguard)",
+    },
+    "⚙️ Leveraged/Inverse": {
+        "SPXL": "S&P 500 3x Bull",
+        "SPXS": "S&P 500 3x Bear",
+        "TQQQ": "Nasdaq 100 3x Bull",
+        "SQQQ": "Nasdaq 100 3x Bear",
+        "TMF": "Treasury 3x Bull",
+        "TMV": "Treasury 3x Bear",
+        "UGL": "Gold 2x Bull",
+        "DGLD": "Gold 2x Bear",
+        "UCO": "Crude Oil 2x Bull",
+        "SCO": "Crude Oil 2x Bear",
+    }
+}
+
+# Quick preset portfolios
+ETF_PRESETS = {
+    "Classic 60/40": ["SPY", "AGG"],
+    "All Weather": ["SPY", "TLT", "IEF", "GLD", "DBC"],
+    "Risk Parity": ["SPY", "TLT", "GLD", "DBC", "VNQ"],
+    "Global Diversified": ["SPY", "EFA", "EEM", "AGG", "VNQ", "DBC"],
+    "Momentum Rotation": ["SPY", "QQQ", "IWM", "EFA", "EEM"],
+    "Defensive": ["USMV", "SPLV", "XLU", "VPU", "AGG", "TLT"],
+    "Growth Focused": ["QQQ", "XLK", "VGT", "MTUM", "VBK"],
+    "Trend Following": ["SPY", "TLT", "GLD", "DBC", "VNQ", "EFA"],
+    "Factor Multi-Strategy": ["VLUE", "MTUM", "QUAL", "USMV"],
+    "Commodity Macro": ["GLD", "SLV", "DBC", "USO", "UUP"],
+}
+
+
 # Page configuration
 st.set_page_config(
     page_title="BackT Backtest Runner",
@@ -164,10 +302,67 @@ st.markdown("""
     /* Compact forms */
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
-    .stSelectbox > div > div,
     .stDateInput > div > div > input {
         font-size: 0.88rem !important;
         padding: 0.45rem 0.65rem !important;
+    }
+
+    /* Selectbox - fix text overflow */
+    .stSelectbox > div > div {
+        font-size: 0.88rem !important;
+    }
+
+    .stSelectbox div[data-baseweb="select"] {
+        min-width: 100% !important;
+    }
+
+    .stSelectbox div[data-baseweb="select"] > div {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        min-height: 2.4rem !important;
+    }
+
+    /* Dropdown menu items - ensure text wraps and is readable */
+    [data-baseweb="popover"] {
+        max-width: 500px !important;
+        width: auto !important;
+        max-height: 400px !important;
+    }
+
+    [role="option"] {
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        min-height: 2.4rem !important;
+        padding: 0.5rem 1rem !important;
+        line-height: 1.4 !important;
+    }
+
+    [role="listbox"] {
+        max-width: 500px !important;
+        max-height: 400px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
+
+    /* Ensure scrollbar is always visible on dropdown menus */
+    [role="listbox"]::-webkit-scrollbar {
+        width: 10px !important;
+        display: block !important;
+    }
+
+    [role="listbox"]::-webkit-scrollbar-track {
+        background: #f1f1f1 !important;
+        border-radius: 5px !important;
+    }
+
+    [role="listbox"]::-webkit-scrollbar-thumb {
+        background: #888 !important;
+        border-radius: 5px !important;
+    }
+
+    [role="listbox"]::-webkit-scrollbar-thumb:hover {
+        background: #555 !important;
     }
 
     /* Labels - smaller and muted */
@@ -470,32 +665,141 @@ def extract_strategy_params(strategy_func):
     return params
 
 
+def render_smart_etf_selector():
+    """
+    Smart ETF selector with presets, categories, and manual input
+    Returns: List of selected symbols
+    """
+    st.caption("🌍 **Trading Universe**")
+
+    # Initialize session state for selected symbols
+    if 'selected_symbols' not in st.session_state:
+        st.session_state.selected_symbols = ["SPY", "QQQ", "TLT", "GLD"]
+
+    # Selection mode tabs
+    selection_mode = st.radio(
+        "Selection Mode",
+        ["Quick Presets", "Browse Categories", "Manual Input"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+
+    st.write("")
+
+    if selection_mode == "Quick Presets":
+        # Preset selection
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            selected_preset = st.selectbox(
+                "Choose a preset portfolio",
+                options=list(ETF_PRESETS.keys()),
+                label_visibility="collapsed"
+            )
+        with col2:
+            if st.button("Apply Preset", type="primary", use_container_width=True):
+                st.session_state.selected_symbols = ETF_PRESETS[selected_preset].copy()
+                st.rerun()
+
+        # Show preset details
+        if selected_preset:
+            preset_symbols = ETF_PRESETS[selected_preset]
+            st.caption(f"**{selected_preset}:** {', '.join(preset_symbols)}")
+
+    elif selection_mode == "Browse Categories":
+        # Category-based selection
+        st.caption("Select ETFs by category (click to expand)")
+
+        for category_name, etfs in ETF_UNIVERSE.items():
+            with st.expander(f"{category_name} ({len(etfs)} ETFs)", expanded=False):
+                # Create checkbox grid (3 columns)
+                cols = st.columns(3)
+                for idx, (symbol, description) in enumerate(etfs.items()):
+                    with cols[idx % 3]:
+                        is_selected = symbol in st.session_state.selected_symbols
+                        if st.checkbox(
+                            f"**{symbol}** - {description}",
+                            value=is_selected,
+                            key=f"etf_{symbol}"
+                        ):
+                            if symbol not in st.session_state.selected_symbols:
+                                st.session_state.selected_symbols.append(symbol)
+                        else:
+                            if symbol in st.session_state.selected_symbols:
+                                st.session_state.selected_symbols.remove(symbol)
+
+    else:  # Manual Input
+        # Manual text input
+        current_symbols_str = ", ".join(st.session_state.selected_symbols)
+        manual_input = st.text_area(
+            "Enter symbols (comma-separated)",
+            value=current_symbols_str,
+            height=100,
+            placeholder="SPY, QQQ, TLT, GLD, BTC-USD, AAPL...",
+            label_visibility="collapsed"
+        )
+
+        col1, col2 = st.columns([2, 1])
+        with col2:
+            if st.button("Update Symbols", type="primary", use_container_width=True):
+                # Parse manual input
+                symbols = [s.strip().upper() for s in manual_input.split(',') if s.strip()]
+                st.session_state.selected_symbols = symbols
+                st.rerun()
+
+        st.caption("You can enter any symbol including stocks, crypto (BTC-USD), or custom tickers")
+
+    # Display current selection
+    st.write("")
+    st.markdown("---")
+
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        if st.session_state.selected_symbols:
+            symbols_display = ", ".join(st.session_state.selected_symbols[:10])
+            if len(st.session_state.selected_symbols) > 10:
+                symbols_display += f", ... (+{len(st.session_state.selected_symbols) - 10} more)"
+            st.caption(f"**Selected ({len(st.session_state.selected_symbols)}):** {symbols_display}")
+        else:
+            st.caption("**No symbols selected**")
+
+    with col2:
+        if st.button("Clear All", use_container_width=True):
+            st.session_state.selected_symbols = []
+            st.rerun()
+
+    with col3:
+        if st.button("Select All (Category)", use_container_width=True,
+                    disabled=(selection_mode != "Browse Categories")):
+            # Add all symbols from currently expanded category
+            st.info("Expand a category and select ETFs individually")
+
+    return st.session_state.selected_symbols
+
+
 def render_configuration_sheet():
     """Sheet 1: Backtest Configuration"""
     st.subheader("⚙️ Backtest Configuration")
+
+    # Smart ETF Selector (outside form for interactivity)
+    symbols = render_smart_etf_selector()
+
+    st.write("")  # Small spacer
 
     with st.form("config_form"):
         # Date Range - compact with breathing room
         col1, col2, col3, col4 = st.columns([1.5, 1.5, 1.5, 1])
         with col1:
             st.caption("📅 **Dates**")
-            start_date = st.date_input("Start", value=date(2020, 1, 1), max_value=date.today())
+            start_date = st.date_input("Start", value=date(2012, 1, 2), max_value=date.today())  # First Monday of Jan 2012
         with col2:
             st.markdown("<p style='font-size: 0.8rem; color: transparent; margin-bottom: 0.3rem; margin-top: 0.4rem; line-height: 1.2;'>**.**</p>", unsafe_allow_html=True)
-            end_date = st.date_input("End", value=date(2023, 12, 31), max_value=date.today())
+            end_date = st.date_input("End", value=date(2025, 10, 24), max_value=date.today())
         with col3:
             st.caption("💰 **Capital**")
             initial_capital = st.number_input("Initial ($)", value=100000, min_value=1000, step=10000, format="%d")
         with col4:
             st.markdown("<p style='font-size: 0.8rem; color: transparent; margin-bottom: 0.3rem; margin-top: 0.4rem; line-height: 1.2;'>**.**</p>", unsafe_allow_html=True)
             allow_short = st.checkbox("Short", value=True, help="Allow short selling")
-
-        st.write("")  # Small spacer
-
-        # Trading Universe - compact
-        st.caption("🌍 **Trading Universe**")
-        universe_input = st.text_input("Symbols", value="SPY, QQQ, TLT, GLD", placeholder="SPY, QQQ, TLT, GLD", label_visibility="collapsed")
-        symbols = [s.strip().upper() for s in universe_input.split(',') if s.strip()]
 
         st.write("")  # Small spacer
 
@@ -511,15 +815,8 @@ def render_configuration_sheet():
 
         st.write("")  # Small spacer
 
-        # Risk Management - compact
-        st.caption("🛡️ **Risk Management**")
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            max_leverage = st.number_input("Max Leverage", value=2.0, min_value=1.0, max_value=10.0, step=0.5)
-        with col2:
-            max_position_size = st.number_input("Max Position", value=0.25, min_value=0.01, max_value=1.0, step=0.05, format="%.2f")
-        with col3:
-            use_mock_data = st.checkbox("Mock Data", value=False, help="Use mock data for testing")
+        # Testing options
+        use_mock_data = st.checkbox("Use Mock Data", value=False, help="Use mock data for testing")
 
         # Compact save button
         col1, col2, col3 = st.columns([1, 1, 1])
@@ -537,8 +834,6 @@ def render_configuration_sheet():
                 'spread': spread / 100,  # Convert to decimal
                 'slippage_pct': slippage_pct / 100,
                 'commission_per_share': commission_per_share,
-                'max_leverage': max_leverage,
-                'max_position_size': max_position_size,
                 'use_mock_data': use_mock_data
             }
             st.success("✅ Configuration saved! Go to 'Strategy' tab to select and configure strategy.")
@@ -649,8 +944,6 @@ def render_strategy_sheet():
                     end_date=config_data['end_date'].strftime('%Y-%m-%d'),
                     initial_capital=config_data['initial_capital'],
                     allow_short=config_data['allow_short'],
-                    max_leverage=config_data['max_leverage'],
-                    max_position_size=config_data['max_position_size'],
                     execution=execution_config,
                     use_mock_data=config_data['use_mock_data'],
                     verbose=False
@@ -799,6 +1092,379 @@ def create_monthly_heatmap(equity_curve, metric='returns', title='Monthly Heatma
     return fig
 
 
+def create_signal_analysis_charts(result, symbols, start_date, end_date):
+    """
+    Create interactive signal analysis charts with price, signals, and positions
+
+    Parameters:
+    -----------
+    result : BacktestResult
+        Backtest result object
+    symbols : list
+        List of symbols traded
+    start_date : datetime
+        Start date for the window
+    end_date : datetime
+        End date for the window
+
+    Returns:
+    --------
+    tuple : (price_chart, position_chart, trades_df_filtered)
+    """
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    # Filter trades to date window
+    trades_df = result.trades.copy()
+
+    # Ensure timezone compatibility
+    if trades_df.index.tz is not None:
+        # Make start_date and end_date timezone-aware to match trades_df
+        if start_date.tz is None:
+            start_date = start_date.tz_localize('UTC')
+        if end_date.tz is None:
+            end_date = end_date.tz_localize('UTC')
+    else:
+        # Make start_date and end_date timezone-naive to match trades_df
+        if start_date.tz is not None:
+            start_date = start_date.tz_localize(None)
+        if end_date.tz is not None:
+            end_date = end_date.tz_localize(None)
+
+    trades_df = trades_df[(trades_df.index >= start_date) & (trades_df.index <= end_date)]
+
+    # Filter equity curve to date window
+    equity_window = result.equity_curve.copy()
+
+    # Ensure timezone compatibility for equity curve
+    if equity_window.index.tz is not None:
+        # Already handled above for start_date/end_date
+        pass
+    else:
+        # Make start_date and end_date timezone-naive if needed
+        start_date_naive = start_date.tz_localize(None) if start_date.tz is not None else start_date
+        end_date_naive = end_date.tz_localize(None) if end_date.tz is not None else end_date
+        start_date = start_date_naive
+        end_date = end_date_naive
+
+    equity_window = equity_window[(equity_window.index >= start_date) & (equity_window.index <= end_date)]
+
+    if trades_df.empty:
+        return None, None, None
+
+    # Get unique symbols from trades
+    traded_symbols = trades_df['symbol'].unique()
+
+    # Load price data for the window
+    try:
+        from backt.data.loaders import YahooDataLoader
+        loader = YahooDataLoader()
+
+        price_data = {}
+        for symbol in traded_symbols:
+            data = loader.load(
+                [symbol],
+                start_date.strftime('%Y-%m-%d'),
+                end_date.strftime('%Y-%m-%d')
+            )
+            if data is not None:
+                if isinstance(data, dict) and symbol in data:
+                    price_data[symbol] = data[symbol]
+                elif isinstance(data, pd.DataFrame):
+                    price_data[symbol] = data
+    except Exception as e:
+        st.warning(f"Could not load price data: {str(e)}")
+        return None, None, None
+
+    # Create subplots: Price charts + Position chart
+    n_symbols = len(traded_symbols)
+    fig = make_subplots(
+        rows=n_symbols + 1, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        subplot_titles=[f"{sym} - Price & Signals" for sym in traded_symbols] + ["Portfolio Position"],
+        row_heights=[0.8/n_symbols]*n_symbols + [0.2]
+    )
+
+    # Color scheme for buy/sell
+    buy_color = '#2ca02c'
+    sell_color = '#d62728'
+
+    # Plot each symbol
+    for idx, symbol in enumerate(traded_symbols, 1):
+        if symbol not in price_data:
+            continue
+
+        prices = price_data[symbol]
+
+        # Add price line
+        fig.add_trace(
+            go.Scatter(
+                x=prices.index,
+                y=prices['close'],
+                mode='lines',
+                name=f'{symbol} Price',
+                line=dict(color='#1f77b4', width=1.5),
+                showlegend=(idx == 1)
+            ),
+            row=idx, col=1
+        )
+
+        # Get trades for this symbol
+        symbol_trades = trades_df[trades_df['symbol'] == symbol].copy()
+
+        # Add buy signals
+        buys = symbol_trades[symbol_trades['side'] == 'buy']
+        if not buys.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=buys.index,
+                    y=buys['price'],
+                    mode='markers',
+                    name='Buy Signal',
+                    marker=dict(
+                        symbol='triangle-up',
+                        size=12,
+                        color=buy_color,
+                        line=dict(width=1, color='white')
+                    ),
+                    showlegend=(idx == 1)
+                ),
+                row=idx, col=1
+            )
+
+        # Add sell signals
+        sells = symbol_trades[symbol_trades['side'] == 'sell']
+        if not sells.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=sells.index,
+                    y=sells['price'],
+                    mode='markers',
+                    name='Sell Signal',
+                    marker=dict(
+                        symbol='triangle-down',
+                        size=12,
+                        color=sell_color,
+                        line=dict(width=1, color='white')
+                    ),
+                    showlegend=(idx == 1)
+                ),
+                row=idx, col=1
+            )
+
+        # Update y-axis label
+        fig.update_yaxes(title_text="Price ($)", row=idx, col=1)
+
+    # Add portfolio equity curve
+    fig.add_trace(
+        go.Scatter(
+            x=equity_window.index,
+            y=equity_window['total_equity'],
+            mode='lines',
+            name='Portfolio Value',
+            line=dict(color='#ff7f0e', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(255, 127, 14, 0.1)'
+        ),
+        row=n_symbols + 1, col=1
+    )
+
+    # Update layout
+    fig.update_layout(
+        height=250 * (n_symbols + 1),
+        hovermode='x unified',
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        margin=dict(l=60, r=20, t=80, b=40)
+    )
+
+    # Update x-axis for bottom subplot only
+    fig.update_xaxes(title_text="Date", row=n_symbols + 1, col=1)
+
+    # Update y-axis for portfolio
+    fig.update_yaxes(title_text="Portfolio Value ($)", row=n_symbols + 1, col=1)
+
+    return fig, trades_df
+
+
+def render_signal_analysis_section():
+    """Render the interactive signal analysis section"""
+    if 'backtest_result' not in st.session_state:
+        return
+
+    result = st.session_state.backtest_result
+    config = st.session_state.backtest_config
+    symbols = st.session_state.get('backtest_symbols', ['SPY'])
+
+    st.write("")
+    st.caption("**📡 Signal Analysis & Visualization**")
+
+    # Check if we have results
+    if result.equity_curve.empty:
+        st.warning("No backtest data available for signal analysis.")
+        return
+
+    if result.trades.empty:
+        st.info("No trades executed during backtest - nothing to analyze.")
+        return
+
+    # Get full date range from backtest
+    full_start = result.equity_curve.index[0]
+    full_end = result.equity_curve.index[-1]
+
+    # Initialize session state for date window
+    if 'signal_window_start' not in st.session_state:
+        st.session_state.signal_window_start = full_start.date()
+    if 'signal_window_end' not in st.session_state:
+        st.session_state.signal_window_end = full_end.date()
+
+    # Quick window presets - BEFORE date pickers so they set values first
+    st.caption("**Quick Windows**")
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    with col1:
+        if st.button("Last Month", use_container_width=True, key="btn_last_month"):
+            st.session_state.signal_window_start = (full_end - pd.Timedelta(days=30)).date()
+            st.session_state.signal_window_end = full_end.date()
+            st.rerun()
+
+    with col2:
+        if st.button("Last 3 Months", use_container_width=True, key="btn_last_3m"):
+            st.session_state.signal_window_start = (full_end - pd.Timedelta(days=90)).date()
+            st.session_state.signal_window_end = full_end.date()
+            st.rerun()
+
+    with col3:
+        if st.button("Last 6 Months", use_container_width=True, key="btn_last_6m"):
+            st.session_state.signal_window_start = (full_end - pd.Timedelta(days=180)).date()
+            st.session_state.signal_window_end = full_end.date()
+            st.rerun()
+
+    with col4:
+        if st.button("Last Year", use_container_width=True, key="btn_last_year"):
+            st.session_state.signal_window_start = (full_end - pd.Timedelta(days=365)).date()
+            st.session_state.signal_window_end = full_end.date()
+            st.rerun()
+
+    with col5:
+        if st.button("Full Range", use_container_width=True, key="btn_full_range"):
+            st.session_state.signal_window_start = full_start.date()
+            st.session_state.signal_window_end = full_end.date()
+            st.rerun()
+
+    st.write("")
+
+    # Date window selection - AFTER quick buttons
+    st.caption("**Or Select Custom Time Window**")
+
+    col1, col2, col3 = st.columns([2, 2, 1])
+
+    with col1:
+        window_start = st.date_input(
+            "Window Start",
+            value=st.session_state.signal_window_start,
+            min_value=full_start.date(),
+            max_value=full_end.date(),
+            key="signal_start_picker"
+        )
+
+    with col2:
+        window_end = st.date_input(
+            "Window End",
+            value=st.session_state.signal_window_end,
+            min_value=full_start.date(),
+            max_value=full_end.date(),
+            key="signal_end_picker"
+        )
+
+    with col3:
+        if st.button("Reset to Full Range", use_container_width=True, key="btn_reset"):
+            st.session_state.signal_window_start = full_start.date()
+            st.session_state.signal_window_end = full_end.date()
+            st.rerun()
+
+    # Only update session state if date pickers changed (not from button click)
+    # This prevents overwriting button-set values
+    if window_start != st.session_state.signal_window_start or window_end != st.session_state.signal_window_end:
+        st.session_state.signal_window_start = window_start
+        st.session_state.signal_window_end = window_end
+
+    # Use session state as source of truth
+    start_ts = pd.Timestamp(st.session_state.signal_window_start)
+    end_ts = pd.Timestamp(st.session_state.signal_window_end)
+
+    # Create charts
+    st.write("")
+    with st.spinner("Loading signal analysis..."):
+        fig, trades_window = create_signal_analysis_charts(
+            result, symbols, start_ts, end_ts
+        )
+
+    if fig is not None:
+        # Display the chart
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Trade statistics for the window
+        if trades_window is not None and not trades_window.empty:
+            st.write("")
+            st.caption("**Trade Statistics for Selected Window**")
+
+            col1, col2, col3, col4, col5 = st.columns(5)
+
+            with col1:
+                st.metric("Total Trades", len(trades_window))
+
+            with col2:
+                buys = len(trades_window[trades_window['side'] == 'buy'])
+                st.metric("Buy Signals", buys)
+
+            with col3:
+                sells = len(trades_window[trades_window['side'] == 'sell'])
+                st.metric("Sell Signals", sells)
+
+            with col4:
+                symbols_traded = trades_window['symbol'].nunique()
+                st.metric("Symbols Traded", symbols_traded)
+
+            with col5:
+                avg_trade_value = trades_window['value'].mean()
+                st.metric("Avg Trade Size", f"${avg_trade_value:,.0f}")
+
+            # Detailed trades table for window
+            with st.expander("📋 Trades in Selected Window", expanded=False):
+                display_trades = trades_window.reset_index()
+                display_trades['timestamp'] = display_trades['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+                # Select columns to display, including reason if available
+                base_cols = ['timestamp', 'symbol', 'side', 'quantity', 'price', 'value', 'commission']
+                if 'meta_reason' in display_trades.columns:
+                    display_cols = base_cols + ['meta_reason']
+                else:
+                    display_cols = base_cols
+
+                st.dataframe(
+                    display_trades[display_cols],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        'meta_reason': st.column_config.TextColumn(
+                            'Reason',
+                            width='large',
+                            help='Why this trade was triggered'
+                        )
+                    }
+                )
+    else:
+        st.info("No trades found in the selected window. Try a different date range.")
+
+
 def render_results_sheet():
     """Sheet 3: Results and Analysis"""
     st.subheader("📊 Backtest Results")
@@ -809,6 +1475,20 @@ def render_results_sheet():
 
     result = st.session_state.backtest_result
     config = st.session_state.backtest_config
+
+    # Check if backtest produced results
+    if result.equity_curve.empty:
+        st.error("❌ Backtest failed to produce results. The equity curve is empty.")
+        st.info("**Possible causes:**")
+        st.write("- Strategy produced no orders")
+        st.write("- All orders were rejected by risk management")
+        st.write("- Data loading failed")
+        st.write("- Strategy parameters are invalid")
+
+        if hasattr(result, 'trades') and not result.trades.empty:
+            st.write(f"- Found {len(result.trades)} trades but no equity curve")
+
+        return
 
     # Create performance report
     report = PerformanceReport(result, initial_capital=config.initial_capital)
@@ -882,8 +1562,58 @@ def render_results_sheet():
     except Exception as e:
         st.warning(f"Could not generate some charts: {str(e)}")
 
+    # Correlation Matrix Section - show if multiple symbols
+    if result.returns_correlation_matrix is not None and not result.returns_correlation_matrix.empty:
+        st.write("")  # Small spacer
+        st.markdown("---")  # Divider
+        st.caption("**🔗 Returns Correlation Matrix**")
+
+        with st.expander("View Correlation Matrix", expanded=True):
+            # Display as heatmap
+            try:
+                import matplotlib.pyplot as plt
+                import seaborn as sns
+
+                fig, ax = plt.subplots(figsize=(10, 8))
+                sns.heatmap(
+                    result.returns_correlation_matrix,
+                    annot=True,
+                    fmt='.2f',
+                    cmap='coolwarm',
+                    center=0,
+                    vmin=-1,
+                    vmax=1,
+                    square=True,
+                    linewidths=0.5,
+                    cbar_kws={'label': 'Correlation'},
+                    ax=ax
+                )
+                ax.set_title('Returns Correlation Matrix', fontsize=14, fontweight='bold')
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close(fig)
+            except Exception as e:
+                st.warning(f"Could not generate correlation heatmap: {str(e)}")
+
+            # Also display as table for exact values
+            st.write("**Correlation Values:**")
+            st.dataframe(
+                result.returns_correlation_matrix.style.background_gradient(
+                    cmap='coolwarm',
+                    vmin=-1,
+                    vmax=1
+                ).format("{:.3f}"),
+                use_container_width=True
+            )
+
+    # Signal Analysis Section - NEW INTERACTIVE MODULE
+    st.write("")  # Small spacer
+    st.markdown("---")  # Divider
+    render_signal_analysis_section()
+
     # Monthly Heatmap Comparison Section - compact
     st.write("")  # Small spacer
+    st.markdown("---")  # Divider
     st.caption("**📅 Monthly Heatmap Comparison**")
 
     # Metric selector - compact
@@ -1058,10 +1788,26 @@ def render_results_sheet():
             start_idx = (page - 1) * rows_per_page
             end_idx = start_idx + rows_per_page
 
+            # Configure column display with better formatting for metadata
+            column_config = {}
+            if 'meta_reason' in display_df.columns:
+                column_config['meta_reason'] = st.column_config.TextColumn(
+                    'Trade Reason',
+                    width='large',
+                    help='Why this trade was triggered'
+                )
+            if 'meta_signal' in display_df.columns:
+                column_config['meta_signal'] = st.column_config.TextColumn(
+                    'Signal',
+                    width='medium',
+                    help='Strategy signal type'
+                )
+
             st.dataframe(
                 display_df.iloc[start_idx:end_idx],
                 use_container_width=True,
-                hide_index=True
+                hide_index=True,
+                column_config=column_config
             )
             st.caption(f"Showing fills {start_idx + 1}-{min(end_idx, len(display_df))} of {len(display_df)} total fills")
 
@@ -1161,8 +1907,6 @@ def render_single_strategy_cpcv():
                 end_date=config_dict['end_date'].strftime('%Y-%m-%d'),
                 initial_capital=config_dict['initial_capital'],
                 allow_short=config_dict.get('allow_short', False),
-                max_leverage=config_dict.get('max_leverage', 1.0),
-                max_position_size=config_dict.get('max_position_size', None),
                 use_mock_data=config_dict.get('use_mock_data', False),
                 execution=execution_config,
                 verbose=False
@@ -1684,8 +2428,6 @@ def render_parameter_optimization_cpcv():
                     end_date=config['end_date'],
                     initial_capital=config.get('initial_capital', 100000.0),
                     allow_short=config.get('allow_short', False),
-                    max_leverage=config.get('max_leverage', 1.0),
-                    max_position_size=config.get('max_position_size', None),
                     execution=execution_config,
                     verbose=False  # Suppress backtest logs during optimization
                 )
@@ -1945,9 +2687,17 @@ def main():
         # Results status
         if 'backtest_result' in st.session_state:
             result = st.session_state.backtest_result
-            final_value = result.equity_curve['total_equity'].iloc[-1]
-            initial_value = result.equity_curve['total_equity'].iloc[0]
-            total_return = (final_value / initial_value - 1) * 100
+
+            # Check if equity curve has data
+            if not result.equity_curve.empty and 'total_equity' in result.equity_curve.columns:
+                final_value = result.equity_curve['total_equity'].iloc[-1]
+                initial_value = result.equity_curve['total_equity'].iloc[0]
+                total_return = (final_value / initial_value - 1) * 100
+            else:
+                # Backtest failed or no data
+                total_return = 0
+                final_value = 0
+                initial_value = 0
             return_color = '#155724' if total_return >= 0 else '#721c24'
             bg_color = 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)' if total_return >= 0 else 'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)'
 
