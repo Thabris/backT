@@ -41,9 +41,14 @@ class MockExecutionEngine(ExecutionEngine, LoggerMixin):
         market_data: Dict[str, TimeSeriesData],
         current_time: pd.Timestamp,
         positions: Dict[str, Position],
-        context: Dict[str, Any]
+        context: Dict[str, Any],
+        symbol_portfolio: Optional['PortfolioManager'] = None
     ) -> List[Fill]:
-        """Execute orders and return fills with risk management"""
+        """Execute orders and return fills with risk management
+
+        Args:
+            symbol_portfolio: Symbol-specific portfolio manager (for independent execution)
+        """
         fills = []
 
         # Get current prices for all symbols
@@ -55,7 +60,11 @@ class MockExecutionEngine(ExecutionEngine, LoggerMixin):
                 pass
 
         # Calculate current portfolio value for risk checks
-        portfolio_value = self._get_portfolio_value(positions, current_prices)
+        # Use symbol-specific portfolio if provided, otherwise use global portfolio
+        if symbol_portfolio is not None:
+            portfolio_value = symbol_portfolio.get_portfolio_value(current_prices)
+        else:
+            portfolio_value = self._get_portfolio_value(positions, current_prices)
 
         # Create a working copy of positions to track changes during this batch
         # This ensures we account for fills within the same batch when checking limits

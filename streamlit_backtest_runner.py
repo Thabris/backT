@@ -1444,10 +1444,24 @@ def render_signal_analysis_section():
     full_end = result.equity_curve.index[-1]
 
     # Initialize session state for date window
+    # Always validate that dates are within the current data range
     if 'signal_window_start' not in st.session_state:
         st.session_state.signal_window_start = full_start.date()
+    else:
+        # Clamp to valid range if outside
+        if st.session_state.signal_window_start < full_start.date():
+            st.session_state.signal_window_start = full_start.date()
+        elif st.session_state.signal_window_start > full_end.date():
+            st.session_state.signal_window_start = full_end.date()
+
     if 'signal_window_end' not in st.session_state:
         st.session_state.signal_window_end = full_end.date()
+    else:
+        # Clamp to valid range if outside
+        if st.session_state.signal_window_end < full_start.date():
+            st.session_state.signal_window_end = full_start.date()
+        elif st.session_state.signal_window_end > full_end.date():
+            st.session_state.signal_window_end = full_end.date()
 
     # Quick window presets - BEFORE date pickers so they set values first
     st.caption("**Quick Windows**")

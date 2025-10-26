@@ -17,13 +17,36 @@ from ..utils.logging_config import LoggerMixin
 class PortfolioManager(LoggerMixin):
     """Manages portfolio state and calculations"""
 
-    def __init__(self, config: BacktestConfig):
+    def __init__(self, config: BacktestConfig, allocated_capital: Optional[float] = None, symbol: Optional[str] = None):
+        """
+        Initialize portfolio manager
+
+        Args:
+            config: Backtest configuration
+            allocated_capital: Capital allocated to this portfolio (for symbol-specific portfolios)
+            symbol: Symbol this portfolio is managing (for independent symbol execution)
+        """
         self.config = config
-        self.initial_capital = config.initial_capital
-        self.cash = config.initial_capital
+        self.allocated_capital = allocated_capital  # Capital allocated to this portfolio
+        self.managed_symbol = symbol  # Symbol this portfolio manages (None = multi-symbol)
+        self.initial_capital = allocated_capital if allocated_capital is not None else config.initial_capital
+        self.cash = self.initial_capital
         self.positions: Dict[str, Position] = {}
         self.equity_history: List[Dict] = []
         self.per_symbol_equity_history: Dict[str, List[Dict]] = {}  # Track per-symbol equity
+        self.symbol_allocated_capital: Dict[str, float] = {}  # Track allocated capital per symbol
+        self.universe_size: int = 0  # Number of symbols in universe
+
+    def initialize_symbol_allocations(self, symbols: List[str]) -> None:
+        """
+        Initialize allocated capital for each symbol in the universe.
+        For independent symbol trading, each gets equal allocation (1/N).
+        """
+        self.universe_size = len(symbols)
+        if self.universe_size > 0:
+            allocation_per_symbol = self.initial_capital / self.universe_size
+            for symbol in symbols:
+                self.symbol_allocated_capital[symbol] = allocation_per_symbol
 
     def process_fill(self, fill: Fill, current_prices: Dict[str, float]) -> None:
         """Process a trade fill and update portfolio state"""
@@ -141,38 +164,65 @@ class PortfolioManager(LoggerMixin):
 
     def _record_per_symbol_equity(self, current_prices: Dict[str, float], timestamp: pd.Timestamp) -> None:
         """Record equity snapshot for each symbol"""
-        for symbol, position in self.positions.items():
+        # For symbol-specific portfolios, only track the managed symbol
+        if self.managed_symbol is not None:
+            symbols_to_track = {self.managed_symbol}
+        else:
+            # Track all symbols that have allocated capital (not just active positions)
+            symbols_to_track = set(self.symbol_allocated_capital.keys()) | set(self.positions.keys())
+
+        for symbol in symbols_to_track:
             if symbol not in self.per_symbol_equity_history:
                 self.per_symbol_equity_history[symbol] = []
 
-            # Calculate position value and equity contribution
-            if position.qty != 0 and symbol in current_prices:
+            # Get allocated capital for this symbol
+            if self.managed_symbol is not None:
+                # Symbol-specific portfolio: use the portfolio's allocated capital
+                allocated_capital = self.allocated_capital or self.initial_capital
+            else:
+                # Multi-symbol portfolio: use per-symbol allocation
+                allocated_capital = self.symbol_allocated_capital.get(
+                    symbol,
+                    self.initial_capital / max(1, self.universe_size) if self.universe_size > 0 else self.initial_capital
+                )
+
+            # Get position if exists
+            position = self.positions.get(symbol)
+
+            if position and position.qty != 0 and symbol in current_prices:
+                # Active position
                 position_value = current_prices[symbol] * position.qty
                 unrealized_pnl = position.unrealized_pnl
                 realized_pnl = position.realized_pnl
                 total_pnl = unrealized_pnl + realized_pnl
-            else:
+            elif position:
+                # Closed position (qty=0 but has realized PnL)
                 position_value = 0.0
                 unrealized_pnl = 0.0
                 realized_pnl = position.realized_pnl
                 total_pnl = realized_pnl
+            else:
+                # No position yet
+                position_value = 0.0
+                unrealized_pnl = 0.0
+                realized_pnl = 0.0
+                total_pnl = 0.0
 
-            # Calculate total equity for this symbol (cost basis + PnL)
-            # Cost basis = qty * avg_price (what we paid for the position)
-            # Total equity = what the position is worth now
-            cost_basis = abs(position.qty) * position.avg_price
-            total_equity = cost_basis + total_pnl
+            # Total equity for this symbol = allocated capital + total PnL
+            # This maintains continuity when position is flat
+            total_equity = allocated_capital + total_pnl
 
             symbol_snapshot = {
                 'timestamp': timestamp,
                 'position_value': position_value,
-                'qty': position.qty,
-                'price': current_prices.get(symbol, position.avg_price),
-                'avg_price': position.avg_price,
+                'qty': position.qty if position else 0.0,
+                'price': current_prices.get(symbol, position.avg_price if position else 0.0),
+                'avg_price': position.avg_price if position else 0.0,
                 'unrealized_pnl': unrealized_pnl,
                 'realized_pnl': realized_pnl,
                 'total_pnl': total_pnl,
-                'total_equity': total_equity  # Add proper equity curve
+                'total_equity': total_equity,
+                'allocated_capital': allocated_capital
             }
 
             self.per_symbol_equity_history[symbol].append(symbol_snapshot)
