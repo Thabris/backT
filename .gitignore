@@ -93,3 +93,10 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Temporary test scripts (see test_scripts/README.md)
+test_scripts/*.py
+test_scripts/*.ipynb
+test_scripts/*.csv
+test_scripts/*.png
+test_scripts/*.html
