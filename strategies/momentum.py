@@ -402,7 +402,7 @@ def kalman_ma_crossover_long_only(
             # Check current position
             has_position = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty > 0
 
-            # Signal-based trading: Only trade on crossovers, not continuous rebalancing
+            # Signal-based trading: Only enter/exit on crossovers
             if golden_cross and not has_position:
                 # Enter long on golden cross (only if not already long)
                 signals[symbol] = 'BUY'
@@ -412,9 +412,9 @@ def kalman_ma_crossover_long_only(
                 signals[symbol] = 'SELL'
                 # Don't add to long_positions - will be closed
             elif has_position:
-                # Hold existing position (no action needed)
+                # Hold existing position - include in rebalancing for equal weights
                 signals[symbol] = 'HOLD_LONG'
-                # Don't add to long_positions - prevents rebalancing
+                long_positions.append(symbol)  # Include for multi-symbol rebalancing
             else:
                 signals[symbol] = 'NEUTRAL'
                 # Stay in cash
@@ -669,9 +669,9 @@ def rsi_mean_reversion(
                 signals[symbol] = 'OVERBOUGHT_SELL'
                 # Don't add to long_positions - will be closed
             elif has_position:
-                # Hold position until overbought
+                # Hold position until overbought - include in rebalancing
                 signals[symbol] = 'HOLD'
-                # Don't add to long_positions - prevents rebalancing
+                long_positions.append(symbol)  # Include for multi-symbol rebalancing
             else:
                 signals[symbol] = 'NEUTRAL'
 
@@ -1041,9 +1041,9 @@ def stochastic_momentum(
                 signals[symbol] = 'STOCH_OVERBOUGHT_SELL'
                 # Don't add to long_positions - will be closed
             elif has_position:
-                # Hold position if still bullish
+                # Hold position if still bullish - include in rebalancing
                 signals[symbol] = 'STOCH_HOLD'
-                # Don't add to long_positions - prevents rebalancing
+                long_positions.append(symbol)  # Include for multi-symbol rebalancing
             else:
                 signals[symbol] = 'NEUTRAL'
 
@@ -1355,9 +1355,9 @@ def adx_trend_filter(
                             # Close short before going long
                             positions_to_close.append(symbol)
                     else:
-                        # Already long - hold position
+                        # Already long - hold position, include in rebalancing
                         signals[symbol] = 'ADX_LONG_HOLD'
-                        # Don't add to long_positions - prevents rebalancing
+                        long_positions.append(symbol)  # Include for multi-symbol rebalancing
                 elif minus_di > plus_di:
                     # Bearish trend
                     if allow_short:
@@ -1369,9 +1369,9 @@ def adx_trend_filter(
                                 # Close long before going short
                                 positions_to_close.append(symbol)
                         else:
-                            # Already short - hold position
+                            # Already short - hold position, include in rebalancing
                             signals[symbol] = 'ADX_SHORT_HOLD'
-                            # Don't add to short_positions - prevents rebalancing
+                            short_positions.append(symbol)  # Include for multi-symbol rebalancing
                     else:
                         # Bearish but shorts not allowed - close long if we have one
                         signals[symbol] = 'ADX_BEARISH_EXIT'
