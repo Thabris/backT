@@ -1212,14 +1212,24 @@ def create_signal_analysis_charts(result, symbols, start_date, end_date):
         st.warning(f"Could not load price data: {str(e)}")
         return None, None, None
 
-    # Create subplots: Price charts + Position chart
+    # Create subplots: Price charts + Portfolio charts (Total Value + Cumulative PnL)
     n_symbols = len(traded_symbols)
+    n_portfolio_rows = 2  # Total Value + Cumulative PnL
+    total_rows = n_symbols + n_portfolio_rows
+
+    # Calculate row heights: price charts get 60%, portfolio charts get 40%
+    price_height = 0.6 / n_symbols
+    portfolio_height = 0.2  # Each portfolio chart gets 20%
+
     fig = make_subplots(
-        rows=n_symbols + 1, cols=1,
+        rows=total_rows, cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.03,
-        subplot_titles=[f"{sym} - Price & Signals" for sym in traded_symbols] + ["Portfolio Position"],
-        row_heights=[0.8/n_symbols]*n_symbols + [0.2]
+        vertical_spacing=0.02,
+        subplot_titles=(
+            [f"{sym} - Price & Signals" for sym in traded_symbols] +
+            ["Portfolio Total Value", "Cumulative PnL by Symbol"]
+        ),
+        row_heights=[price_height]*n_symbols + [portfolio_height, portfolio_height]
     )
 
     # Color scheme for buy/sell
@@ -1292,23 +1302,92 @@ def create_signal_analysis_charts(result, symbols, start_date, end_date):
         # Update y-axis label
         fig.update_yaxes(title_text="Price ($)", row=idx, col=1)
 
-    # Add portfolio equity curve
+    # Add portfolio equity curve (first portfolio chart)
+    portfolio_value_row = n_symbols + 1
     fig.add_trace(
         go.Scatter(
             x=equity_window.index,
             y=equity_window['total_equity'],
             mode='lines',
-            name='Portfolio Value',
+            name='Total Portfolio Value',
             line=dict(color='#ff7f0e', width=2),
             fill='tozeroy',
             fillcolor='rgba(255, 127, 14, 0.1)'
         ),
-        row=n_symbols + 1, col=1
+        row=portfolio_value_row, col=1
     )
+
+    # Add cumulative PnL by symbol (second portfolio chart)
+    cumulative_pnl_row = n_symbols + 2
+    if result.per_symbol_equity_curves:
+        # Generate distinct colors for each symbol
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+                  '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+
+        for idx, (symbol, symbol_equity) in enumerate(result.per_symbol_equity_curves.items()):
+            if symbol not in traded_symbols:
+                continue
+
+            # Calculate cumulative PnL for this symbol
+            # Symbol equity curve contains the equity attributed to this symbol
+            symbol_equity_window = symbol_equity[
+                (symbol_equity.index >= pd.Timestamp(start_date)) &
+                (symbol_equity.index <= pd.Timestamp(end_date))
+            ]
+
+            if not symbol_equity_window.empty and 'total_equity' in symbol_equity_window.columns:
+                # Cumulative PnL = current equity - initial capital allocated to this symbol
+                initial_value = symbol_equity_window['total_equity'].iloc[0]
+                cumulative_pnl = symbol_equity_window['total_equity'] - initial_value
+
+                color = colors[idx % len(colors)]
+                fig.add_trace(
+                    go.Scatter(
+                        x=symbol_equity_window.index,
+                        y=cumulative_pnl,
+                        mode='lines',
+                        name=f'{symbol} PnL',
+                        line=dict(color=color, width=1.5),
+                        stackgroup='one',  # Stack the PnLs
+                        fillcolor=color
+                    ),
+                    row=cumulative_pnl_row, col=1
+                )
+    else:
+        # Fallback: Calculate cumulative PnL from trades
+        for idx, symbol in enumerate(traded_symbols):
+            symbol_trades = trades_df[trades_df['symbol'] == symbol].copy()
+            if symbol_trades.empty:
+                continue
+
+            # Calculate cumulative PnL from trade history
+            symbol_trades['pnl'] = 0.0
+            for i in range(len(symbol_trades)):
+                trade = symbol_trades.iloc[i]
+                if trade['side'] == 'sell':
+                    # Simplified PnL calculation: value of sell - value of corresponding buy
+                    # This is approximate - actual PnL tracking would need position tracking
+                    symbol_trades.iloc[i, symbol_trades.columns.get_loc('pnl')] = trade['value']
+
+            symbol_trades['cumulative_pnl'] = symbol_trades['pnl'].cumsum()
+
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+            color = colors[idx % len(colors)]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=symbol_trades.index,
+                    y=symbol_trades['cumulative_pnl'],
+                    mode='lines',
+                    name=f'{symbol} PnL',
+                    line=dict(color=color, width=1.5)
+                ),
+                row=cumulative_pnl_row, col=1
+            )
 
     # Update layout
     fig.update_layout(
-        height=250 * (n_symbols + 1),
+        height=200 * (n_symbols + n_portfolio_rows),
         hovermode='x unified',
         showlegend=True,
         legend=dict(
@@ -1322,10 +1401,11 @@ def create_signal_analysis_charts(result, symbols, start_date, end_date):
     )
 
     # Update x-axis for bottom subplot only
-    fig.update_xaxes(title_text="Date", row=n_symbols + 1, col=1)
+    fig.update_xaxes(title_text="Date", row=total_rows, col=1)
 
-    # Update y-axis for portfolio
-    fig.update_yaxes(title_text="Portfolio Value ($)", row=n_symbols + 1, col=1)
+    # Update y-axis labels
+    fig.update_yaxes(title_text="Portfolio Value ($)", row=portfolio_value_row, col=1)
+    fig.update_yaxes(title_text="Cumulative PnL ($)", row=cumulative_pnl_row, col=1)
 
     return fig, trades_df
 
