@@ -172,8 +172,8 @@ def quality_minus_junk(
     active_positions = high_quality + junk
     for symbol in market_data.keys():
         if symbol not in active_positions:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
 
     # Store strategy state
@@ -312,8 +312,8 @@ def value_everywhere(
     active = value_stocks + growth_stocks
     for symbol in market_data.keys():
         if symbol not in active:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
 
     context['signals'] = signals
@@ -439,8 +439,8 @@ def betting_against_beta(
     active = low_beta_stocks + high_beta_stocks
     for symbol in market_data.keys():
         if symbol not in active:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
 
     context['signals'] = signals
@@ -634,8 +634,8 @@ def quality_value_momentum(
     active = long_stocks + short_stocks
     for symbol in market_data.keys():
         if symbol not in active:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
 
     context['signals'] = signals

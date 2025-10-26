@@ -294,8 +294,8 @@ def ma_crossover_long_short(
     # Close positions for assets with no signal
     for symbol in market_data.keys():
         if symbol not in (long_positions + short_positions):
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
 
     # Store strategy state for analysis
@@ -433,8 +433,8 @@ def kalman_ma_crossover_long_only(
     # Close positions for assets with no signal
     for symbol in market_data.keys():
         if symbol not in long_positions:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
 
     # Store strategy state for analysis
@@ -569,8 +569,8 @@ def kalman_ma_crossover_long_short(
     # Close positions for assets with no signal
     for symbol in market_data.keys():
         if symbol not in (long_positions + short_positions):
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
 
     # Store strategy state for analysis
@@ -659,8 +659,8 @@ def rsi_mean_reversion(
                 # Exit position
             else:
                 # Check if we have a position to hold
-                if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                    if positions[symbol].quantity > 0:
+                if symbol in positions and hasattr(positions[symbol], 'qty'):
+                    if positions[symbol].qty > 0:
                         # Hold position until overbought
                         signals[symbol] = 'HOLD'
                         long_positions.append(symbol)
@@ -687,8 +687,8 @@ def rsi_mean_reversion(
     # Close positions not in long_positions
     for symbol in market_data.keys():
         if symbol not in long_positions:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
 
     # Store strategy state
@@ -1053,8 +1053,8 @@ def stochastic_momentum(
     # Close positions not in long_positions
     for symbol in market_data.keys():
         if symbol not in long_positions:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
 
     # Store strategy state
@@ -1111,6 +1111,7 @@ def bollinger_mean_reversion(
     orders = {}
     signals = {}
     long_positions = []
+    positions_to_close = []  # Track explicit EXIT signals
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -1147,9 +1148,11 @@ def bollinger_mean_reversion(
             near_middle = middle_distance < 0.01  # Within 1% of middle band
 
             # Generate signals with detailed information
-            has_position = symbol in positions and hasattr(positions[symbol], 'quantity') and positions[symbol].quantity > 0
+            has_position = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty > 0
 
-            if touches_lower or crosses_lower:
+            # Signal-based trading: Only trade on actual signals, not continuous rebalancing
+            if (touches_lower or crosses_lower) and not has_position:
+                # BUY signal - enter position (only if we don't already have one)
                 signals[symbol] = {
                     'action': 'BB_LOWER_BUY',
                     'reason': f"Price ${current_price:.2f} at/below lower band ${lower_band:.2f} ({lower_distance:.2%} below)",
@@ -1161,6 +1164,7 @@ def bollinger_mean_reversion(
                 }
                 long_positions.append(symbol)
             elif touches_upper and has_position:
+                # EXIT signal - price reached upper band (take profit)
                 signals[symbol] = {
                     'action': 'BB_EXIT_UPPER',
                     'reason': f"Price ${current_price:.2f} at/above upper band ${upper_band:.2f} - exit overbought",
@@ -1169,7 +1173,9 @@ def bollinger_mean_reversion(
                     'middle_band': middle_band,
                     'price': current_price
                 }
+                positions_to_close.append(symbol)  # Mark for explicit closing
             elif near_middle and has_position:
+                # EXIT signal - price returned to middle (mean reversion complete)
                 signals[symbol] = {
                     'action': 'BB_EXIT_MIDDLE',
                     'reason': f"Price ${current_price:.2f} near middle band ${middle_band:.2f} - mean reversion complete",
@@ -1178,20 +1184,23 @@ def bollinger_mean_reversion(
                     'middle_band': middle_band,
                     'price': current_price
                 }
-            elif has_position:
-                # Hold position while still oversold
-                signals[symbol] = {
-                    'action': 'BB_HOLD',
-                    'reason': f"Holding position - price ${current_price:.2f} between bands",
-                    'price': current_price
-                }
-                long_positions.append(symbol)
+                positions_to_close.append(symbol)  # Mark for explicit closing
             else:
-                signals[symbol] = {
-                    'action': 'NEUTRAL',
-                    'reason': f"No signal - price ${current_price:.2f} between bands",
-                    'price': current_price
-                }
+                # No signal - either holding or neutral
+                if has_position:
+                    signals[symbol] = {
+                        'action': 'BB_HOLD',
+                        'reason': f"Holding position - price ${current_price:.2f} between bands",
+                        'price': current_price
+                    }
+                    # NOTE: Do NOT add to long_positions here!
+                    # This prevents continuous rebalancing. Position stays as-is until exit signal.
+                else:
+                    signals[symbol] = {
+                        'action': 'NEUTRAL',
+                        'reason': f"No signal - price ${current_price:.2f} between bands",
+                        'price': current_price
+                    }
 
         except Exception as e:
             continue
@@ -1218,24 +1227,24 @@ def bollinger_mean_reversion(
                 }
             }
 
-    # Close positions not in long_positions
-    for symbol in market_data.keys():
-        if symbol not in long_positions:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
-                    signal_info = signals.get(symbol, {})
-                    orders[symbol] = {
-                        'action': 'close',
-                        'meta': {
-                            'reason': signal_info.get('reason', 'Exit position'),
-                            'signal': signal_info.get('action', 'EXIT'),
-                            'strategy': 'bollinger_mean_reversion'
-                        }
+    # Close positions with explicit EXIT signals only
+    for symbol in positions_to_close:
+        if symbol in positions and hasattr(positions[symbol], 'qty'):
+            if positions[symbol].qty != 0:
+                signal_info = signals.get(symbol, {})
+                orders[symbol] = {
+                    'action': 'close',
+                    'meta': {
+                        'reason': signal_info.get('reason', 'Exit position'),
+                        'signal': signal_info.get('action', 'EXIT'),
+                        'strategy': 'bollinger_mean_reversion'
                     }
+                }
 
     # Store strategy state
     context['signals'] = signals
     context['long_positions'] = long_positions
+    context['positions_to_close'] = positions_to_close
     context['total_positions'] = total_positions
 
     return orders
@@ -1360,8 +1369,8 @@ def adx_trend_filter(
     active_positions = long_positions + short_positions
     for symbol in market_data.keys():
         if symbol not in active_positions:
-            if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                if positions[symbol].quantity != 0:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
 
     # Store strategy state
