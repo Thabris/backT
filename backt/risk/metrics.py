@@ -150,10 +150,10 @@ class MetricsEngine(LoggerMixin):
             'cagr': cagr,
             'annualized_volatility': volatility,
             'volatility': volatility,  # Add alias for display compatibility
-            'annualized_return': returns.mean() * periods_per_year,  # Add alias
+            'annualized_return': cagr,  # Use CAGR (geometric mean), not arithmetic mean
             'sharpe_ratio': sharpe_ratio,
             'sortino_ratio': sortino_ratio,
-            'annual_return': returns.mean() * periods_per_year,
+            'annual_return': cagr,  # Use CAGR (geometric mean), not arithmetic mean
             'best_day': best_day,
             'worst_day': worst_day,
             'positive_days': (returns > 0).sum() / len(returns),
