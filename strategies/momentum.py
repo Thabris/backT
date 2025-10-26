@@ -1134,27 +1134,64 @@ def bollinger_mean_reversion(
             prev_lower = bb['lower'].iloc[-2]
             prev_upper = bb['upper'].iloc[-2]
 
-            # Detect band touches/crosses
-            touches_lower = prev_price > prev_lower and current_price <= lower_band
-            touches_upper = prev_price < prev_upper and current_price >= upper_band
-            near_middle = abs(current_price - middle_band) / middle_band < 0.01  # Within 1% of middle
+            # Calculate distance from bands (as percentage)
+            lower_distance = (current_price - lower_band) / lower_band
+            upper_distance = (upper_band - current_price) / upper_band
+            middle_distance = abs(current_price - middle_band) / middle_band
 
-            # Generate signals
-            if touches_lower:
-                signals[symbol] = 'BB_LOWER_BUY'
+            # Detect band touches/crosses
+            # More lenient conditions to generate more trades
+            touches_lower = current_price <= lower_band  # Price at or below lower band
+            crosses_lower = prev_price > prev_lower and current_price <= lower_band  # Strong signal
+            touches_upper = current_price >= upper_band  # Price at or above upper band
+            near_middle = middle_distance < 0.01  # Within 1% of middle band
+
+            # Generate signals with detailed information
+            has_position = symbol in positions and hasattr(positions[symbol], 'quantity') and positions[symbol].quantity > 0
+
+            if touches_lower or crosses_lower:
+                signals[symbol] = {
+                    'action': 'BB_LOWER_BUY',
+                    'reason': f"Price ${current_price:.2f} at/below lower band ${lower_band:.2f} ({lower_distance:.2%} below)",
+                    'lower_band': lower_band,
+                    'upper_band': upper_band,
+                    'middle_band': middle_band,
+                    'price': current_price,
+                    'is_cross': crosses_lower
+                }
                 long_positions.append(symbol)
-            elif touches_upper or near_middle:
-                signals[symbol] = 'BB_EXIT'
+            elif touches_upper and has_position:
+                signals[symbol] = {
+                    'action': 'BB_EXIT_UPPER',
+                    'reason': f"Price ${current_price:.2f} at/above upper band ${upper_band:.2f} - exit overbought",
+                    'lower_band': lower_band,
+                    'upper_band': upper_band,
+                    'middle_band': middle_band,
+                    'price': current_price
+                }
+            elif near_middle and has_position:
+                signals[symbol] = {
+                    'action': 'BB_EXIT_MIDDLE',
+                    'reason': f"Price ${current_price:.2f} near middle band ${middle_band:.2f} - mean reversion complete",
+                    'lower_band': lower_band,
+                    'upper_band': upper_band,
+                    'middle_band': middle_band,
+                    'price': current_price
+                }
+            elif has_position:
+                # Hold position while still oversold
+                signals[symbol] = {
+                    'action': 'BB_HOLD',
+                    'reason': f"Holding position - price ${current_price:.2f} between bands",
+                    'price': current_price
+                }
+                long_positions.append(symbol)
             else:
-                # Hold position if we have one
-                if symbol in positions and hasattr(positions[symbol], 'quantity'):
-                    if positions[symbol].quantity > 0:
-                        signals[symbol] = 'BB_HOLD'
-                        long_positions.append(symbol)
-                    else:
-                        signals[symbol] = 'NEUTRAL'
-                else:
-                    signals[symbol] = 'NEUTRAL'
+                signals[symbol] = {
+                    'action': 'NEUTRAL',
+                    'reason': f"No signal - price ${current_price:.2f} between bands",
+                    'price': current_price
+                }
 
         except Exception as e:
             continue
@@ -1166,9 +1203,19 @@ def bollinger_mean_reversion(
         weight_per_position = 1.0 / total_positions
 
         for symbol in long_positions:
+            signal_info = signals.get(symbol, {})
             orders[symbol] = {
                 'action': 'target_weight',
-                'weight': weight_per_position
+                'weight': weight_per_position,
+                'meta': {
+                    'reason': signal_info.get('reason', 'Bollinger Bands position'),
+                    'signal': signal_info.get('action', 'BB_HOLD'),
+                    'strategy': 'bollinger_mean_reversion',
+                    'lower_band': signal_info.get('lower_band'),
+                    'upper_band': signal_info.get('upper_band'),
+                    'middle_band': signal_info.get('middle_band'),
+                    'price': signal_info.get('price')
+                }
             }
 
     # Close positions not in long_positions
@@ -1176,7 +1223,15 @@ def bollinger_mean_reversion(
         if symbol not in long_positions:
             if symbol in positions and hasattr(positions[symbol], 'quantity'):
                 if positions[symbol].quantity != 0:
-                    orders[symbol] = {'action': 'close'}
+                    signal_info = signals.get(symbol, {})
+                    orders[symbol] = {
+                        'action': 'close',
+                        'meta': {
+                            'reason': signal_info.get('reason', 'Exit position'),
+                            'signal': signal_info.get('action', 'EXIT'),
+                            'strategy': 'bollinger_mean_reversion'
+                        }
+                    }
 
     # Store strategy state
     context['signals'] = signals
