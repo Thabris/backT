@@ -2342,13 +2342,15 @@ def render_parameter_optimization_cpcv():
                 min_default = float(param_def.get('min', 0.01))
                 max_default = float(param_def.get('max', 1.0))
                 step_default = float(param_def.get('step', 0.01))
-                step_format = 0.001
+                step_format = 0.0001  # Allow very small steps (e.g., Kalman noise parameters)
+                step_min_value = 0.00001  # Minimum allowed step value
             else:
                 # Integer parameters
                 min_default = int(param_def.get('min', 5))
                 max_default = int(param_def.get('max', 50))
                 step_default = int(param_def.get('step', 5))
                 step_format = 1
+                step_min_value = 1
 
             with col2:
                 min_val = st.number_input(
@@ -2356,7 +2358,7 @@ def render_parameter_optimization_cpcv():
                     key=f"min_{idx}",
                     value=min_default,
                     step=step_format,
-                    format="%.4f" if is_float else "%d"
+                    format="%.5f" if is_float else "%d"
                 )
 
             with col3:
@@ -2365,7 +2367,7 @@ def render_parameter_optimization_cpcv():
                     key=f"max_{idx}",
                     value=max_default,
                     step=step_format,
-                    format="%.4f" if is_float else "%d"
+                    format="%.5f" if is_float else "%d"
                 )
 
             with col4:
@@ -2374,8 +2376,8 @@ def render_parameter_optimization_cpcv():
                     key=f"step_{idx}",
                     value=step_default,
                     step=step_format,
-                    min_value=step_format,
-                    format="%.4f" if is_float else "%d"
+                    min_value=step_min_value,
+                    format="%.5f" if is_float else "%d"  # Show 5 decimals for very small steps
                 )
 
             with col5:
