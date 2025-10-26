@@ -1701,7 +1701,11 @@ def render_results_sheet():
             import matplotlib.pyplot as plt
             import seaborn as sns
 
-            fig, ax = plt.subplots(figsize=(10, 8))
+            # Compact, elegant sizing based on number of symbols
+            n_symbols = len(result.returns_correlation_matrix)
+            size = min(6, max(4, n_symbols * 0.8))  # Scale with symbols, cap at 6
+
+            fig, ax = plt.subplots(figsize=(size, size * 0.85))
             sns.heatmap(
                 result.returns_correlation_matrix,
                 annot=True,
@@ -1712,10 +1716,11 @@ def render_results_sheet():
                 vmax=1,
                 square=True,
                 linewidths=0.5,
-                cbar_kws={'label': 'Correlation'},
+                cbar_kws={'label': 'Correlation', 'shrink': 0.8},
+                annot_kws={'size': 9},
                 ax=ax
             )
-            ax.set_title('Returns Correlation Matrix', fontsize=14, fontweight='bold')
+            ax.set_title('Returns Correlation Matrix', fontsize=11, fontweight='bold', pad=10)
             plt.tight_layout()
             st.pyplot(fig)
             plt.close(fig)
