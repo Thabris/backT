@@ -163,8 +163,11 @@ class PerformanceReport(LoggerMixin):
 
             # Calculate metrics
             total_return = (benchmark_prices.iloc[-1] / benchmark_prices.iloc[0]) - 1
-            num_periods = len(benchmark_returns)
-            num_years = num_periods / 252  # Assuming daily data
+
+            # Calculate actual calendar time (not data point count!)
+            start_date = benchmark_prices.index[0]
+            end_date = benchmark_prices.index[-1]
+            num_years = (end_date - start_date).days / 365.25
 
             if num_years > 0:
                 annualized_return = (1 + total_return) ** (1 / num_years) - 1
