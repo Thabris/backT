@@ -370,8 +370,7 @@ def kalman_ma_crossover_long_only(
 
     orders = {}
     signals = {}
-    long_positions = []
-    new_entries = []  # Track NEW entry signals (not holds)
+    new_entries = []  # Track NEW entry signals only
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -407,42 +406,31 @@ def kalman_ma_crossover_long_only(
             if golden_cross and not has_position:
                 # NEW entry on golden cross
                 signals[symbol] = 'BUY'
-                long_positions.append(symbol)
-                new_entries.append(symbol)  # Mark as new entry
+                new_entries.append(symbol)
             elif death_cross and has_position:
                 # Exit on death cross
                 signals[symbol] = 'SELL'
-                # Don't add to long_positions - will be closed
             elif has_position:
                 # Hold existing position
                 signals[symbol] = 'HOLD_LONG'
-                long_positions.append(symbol)  # Include in position count
             else:
                 signals[symbol] = 'NEUTRAL'
-                # Stay in cash
 
         except Exception as e:
             continue
 
-    # Calculate position sizing
-    total_positions = len(long_positions)
-    prev_position_count = context.get('prev_position_count', 0)
+    # Calculate position sizing - fixed allocation per symbol based on universe size
+    # Each symbol gets equal share regardless of whether others are active
+    total_symbols = len(market_data)  # Total universe size
+    weight_per_symbol = 1.0 / total_symbols
 
-    # Only issue orders if portfolio composition changed or there are new entries/exits
-    portfolio_changed = (total_positions != prev_position_count)
-    has_new_entries = len(new_entries) > 0
-    has_exits = any(sig == 'SELL' for sig in signals.values())
-
-    if total_positions > 0 and (portfolio_changed or has_new_entries or has_exits):
-        # Portfolio composition changed - rebalance all positions to equal weights
-        weight_per_position = 1.0 / total_positions
-
-        # Create target_weight orders for all long positions
-        for symbol in long_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': weight_per_position
-            }
+    # Only issue orders for NEW entries (not for holds)
+    # Each symbol trades independently - no cross-symbol rebalancing
+    for symbol in new_entries:
+        orders[symbol] = {
+            'action': 'target_weight',
+            'weight': weight_per_symbol
+        }
 
     # Close positions on death cross (explicit SELL signal)
     for symbol, signal in signals.items():
@@ -453,7 +441,6 @@ def kalman_ma_crossover_long_only(
 
     # Store strategy state for analysis
     context['signals'] = signals
-    context['prev_position_count'] = total_positions
 
     return orders
 
