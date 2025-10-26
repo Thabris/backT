@@ -455,7 +455,7 @@ def load_spy_benchmark_data_from_backtest(backtest_result, initial_capital: floa
     return _load_spy_from_yahoo(start_date, end_date, initial_capital)
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=3600, max_entries=10, show_spinner=False)
 def _load_spy_from_yahoo(start_date: str, end_date: str, initial_capital: float):
     """
     Load SPY data from Yahoo Finance with caching
@@ -510,7 +510,7 @@ def _load_spy_from_yahoo(start_date: str, end_date: str, initial_capital: float)
     return (None, "Unknown error")
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(max_entries=50, show_spinner=False)
 def calculate_monthly_metric_series(equity_curve_hash: str, equity_curve_dict: dict, metric: str):
     """
     Calculate monthly metric series with caching
@@ -957,6 +957,14 @@ def render_strategy_sheet():
         run_button = st.button("🚀 Run Backtest", type="primary", use_container_width=True)
 
     if run_button:
+        # Clear previous results to prevent memory buildup
+        if 'backtest_result' in st.session_state:
+            del st.session_state.backtest_result
+        if 'backtest_config' in st.session_state:
+            del st.session_state.backtest_config
+        if 'backtest_symbols' in st.session_state:
+            del st.session_state.backtest_symbols
+
         # Store strategy selection
         st.session_state.selected_strategy_name = selected_strategy_name
         st.session_state.selected_strategy_func = strategy_func
@@ -2841,6 +2849,12 @@ def main():
         if st.button("🔄 Reset Session", use_container_width=True, help="Clear all session data"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
+            st.rerun()
+
+        # Clear cache button - helps with performance after multiple runs
+        if st.button("🗑️ Clear Cache", use_container_width=True, help="Clear cached data (use if app becomes slow)"):
+            st.cache_data.clear()
+            st.success("Cache cleared! App performance should improve.")
             st.rerun()
 
 
