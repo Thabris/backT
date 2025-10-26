@@ -157,6 +157,12 @@ class PortfolioManager(LoggerMixin):
                 realized_pnl = position.realized_pnl
                 total_pnl = realized_pnl
 
+            # Calculate total equity for this symbol (cost basis + PnL)
+            # Cost basis = qty * avg_price (what we paid for the position)
+            # Total equity = what the position is worth now
+            cost_basis = abs(position.qty) * position.avg_price
+            total_equity = cost_basis + total_pnl
+
             symbol_snapshot = {
                 'timestamp': timestamp,
                 'position_value': position_value,
@@ -165,7 +171,8 @@ class PortfolioManager(LoggerMixin):
                 'avg_price': position.avg_price,
                 'unrealized_pnl': unrealized_pnl,
                 'realized_pnl': realized_pnl,
-                'total_pnl': total_pnl
+                'total_pnl': total_pnl,
+                'total_equity': total_equity  # Add proper equity curve
             }
 
             self.per_symbol_equity_history[symbol].append(symbol_snapshot)

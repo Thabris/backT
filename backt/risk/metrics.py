@@ -567,67 +567,86 @@ class MetricsEngine(LoggerMixin):
 
         metrics = {}
 
-        # Use total_pnl as the primary metric for symbol performance
-        if 'total_pnl' in equity_curve.columns:
-            pnl_series = equity_curve['total_pnl']
+        # Use total_equity if available (proper equity curve), otherwise fall back to total_pnl
+        equity_column = 'total_equity' if 'total_equity' in equity_curve.columns else 'total_pnl'
 
-            # Total PnL
-            initial_pnl = pnl_series.iloc[0] if len(pnl_series) > 0 else 0
-            final_pnl = pnl_series.iloc[-1] if len(pnl_series) > 0 else 0
-            total_pnl = final_pnl - initial_pnl
+        if equity_column in equity_curve.columns:
+            equity_series = equity_curve[equity_column]
 
-            # Calculate returns from PnL changes
-            pnl_changes = pnl_series.diff().dropna()
+            # Calculate percentage returns from equity curve
+            returns = equity_series.pct_change().dropna()
 
-            if not pnl_changes.empty and len(pnl_changes) > 1:
+            if not returns.empty and len(returns) > 1:
                 periods_per_year = self._get_annualization_factor(equity_curve.index)
 
-                # Average PnL per period
-                avg_pnl_per_period = pnl_changes.mean()
+                # Total return and CAGR
+                initial_equity = equity_series.iloc[0]
+                final_equity = equity_series.iloc[-1]
 
-                # Volatility of PnL
-                pnl_volatility = pnl_changes.std()
+                if initial_equity > 0:
+                    total_return = (final_equity / initial_equity) - 1
 
-                # Annualized volatility
-                annualized_volatility = pnl_volatility * np.sqrt(periods_per_year)
+                    # Calculate time period for CAGR
+                    start_date = equity_curve.index[0]
+                    end_date = equity_curve.index[-1]
+                    num_years = (end_date - start_date).days / 365.25
 
-                # Sharpe-like ratio for PnL
-                sharpe_ratio = (avg_pnl_per_period / pnl_volatility * np.sqrt(periods_per_year)) \
-                    if pnl_volatility > 0 else 0
+                    if num_years > 0:
+                        cagr = (1 + total_return) ** (1 / num_years) - 1
+                    else:
+                        cagr = 0
+                else:
+                    total_return = 0
+                    cagr = 0
+
+                # Volatility (annualized)
+                volatility = returns.std() * np.sqrt(periods_per_year)
+
+                # Sharpe ratio (using proper percentage returns)
+                mean_return = returns.mean()
+                sharpe_ratio = (mean_return / returns.std() * np.sqrt(periods_per_year)) \
+                    if returns.std() > 0 else 0
 
                 # Sortino ratio (downside deviation)
-                downside_pnl = pnl_changes[pnl_changes < 0]
-                downside_deviation = downside_pnl.std()
-                sortino_ratio = (avg_pnl_per_period / downside_deviation * np.sqrt(periods_per_year)) \
+                downside_returns = returns[returns < 0]
+                downside_deviation = downside_returns.std()
+                sortino_ratio = (mean_return / downside_deviation * np.sqrt(periods_per_year)) \
                     if downside_deviation > 0 else 0
 
-                # Best and worst days
-                best_day = pnl_changes.max()
-                worst_day = pnl_changes.min()
-
-                # Win rate (percentage of positive PnL days)
-                positive_days = (pnl_changes > 0).sum() / len(pnl_changes)
-
-                metrics.update({
-                    'total_pnl': total_pnl,
-                    'final_pnl': final_pnl,
-                    'avg_pnl_per_period': avg_pnl_per_period,
-                    'pnl_volatility': pnl_volatility,
-                    'annualized_volatility': annualized_volatility,
-                    'sharpe_ratio': sharpe_ratio,
-                    'sortino_ratio': sortino_ratio,
-                    'best_day': best_day,
-                    'worst_day': worst_day,
-                    'positive_days': positive_days
-                })
-
-                # Drawdown metrics on cumulative PnL
-                running_max = pnl_series.expanding().max()
-                drawdown = pnl_series - running_max
+                # Drawdown metrics
+                running_max = equity_series.expanding().max()
+                drawdown = (equity_series - running_max) / running_max
                 max_drawdown = drawdown.min()
 
+                # Best and worst periods
+                best_period = returns.max()
+                worst_period = returns.min()
+
+                # Win rate
+                win_rate = (returns > 0).sum() / len(returns) if len(returns) > 0 else 0
+
+                # PnL metrics
+                if 'total_pnl' in equity_curve.columns:
+                    total_pnl = equity_curve['total_pnl'].iloc[-1] - equity_curve['total_pnl'].iloc[0]
+                    final_pnl = equity_curve['total_pnl'].iloc[-1]
+                else:
+                    total_pnl = final_equity - initial_equity
+                    final_pnl = total_pnl
+
                 metrics.update({
+                    'total_return': total_return,
+                    'cagr': cagr,
+                    'total_pnl': total_pnl,
+                    'final_pnl': final_pnl,
+                    'initial_equity': initial_equity,
+                    'final_equity': final_equity,
+                    'annualized_volatility': volatility,
+                    'sharpe_ratio': sharpe_ratio,
+                    'sortino_ratio': sortino_ratio,
                     'max_drawdown': max_drawdown,
+                    'best_period': best_period,
+                    'worst_period': worst_period,
+                    'win_rate': win_rate
                 })
 
         # Add trade-level metrics if available
