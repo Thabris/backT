@@ -399,16 +399,22 @@ def kalman_ma_crossover_long_only(
             golden_cross = (prev_fast <= prev_slow) and (current_fast > current_slow)
             death_cross = (prev_fast >= prev_slow) and (current_fast < current_slow)
 
-            # Generate signals - LONG ONLY
-            if golden_cross:
+            # Check current position
+            has_position = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty > 0
+
+            # Signal-based trading: Only trade on crossovers, not continuous rebalancing
+            if golden_cross and not has_position:
+                # Enter long on golden cross (only if not already long)
                 signals[symbol] = 'BUY'
                 long_positions.append(symbol)
-            elif death_cross:
+            elif death_cross and has_position:
+                # Exit on death cross
                 signals[symbol] = 'SELL'
-                # Go to cash
-            elif current_fast > current_slow:
+                # Don't add to long_positions - will be closed
+            elif has_position:
+                # Hold existing position (no action needed)
                 signals[symbol] = 'HOLD_LONG'
-                long_positions.append(symbol)
+                # Don't add to long_positions - prevents rebalancing
             else:
                 signals[symbol] = 'NEUTRAL'
                 # Stay in cash
@@ -430,9 +436,9 @@ def kalman_ma_crossover_long_only(
                 'weight': weight_per_position
             }
 
-    # Close positions for assets with no signal
-    for symbol in market_data.keys():
-        if symbol not in long_positions:
+    # Close positions on death cross (explicit SELL signal)
+    for symbol, signal in signals.items():
+        if signal == 'SELL':
             if symbol in positions and hasattr(positions[symbol], 'qty'):
                 if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
@@ -650,24 +656,24 @@ def rsi_mean_reversion(
 
             current_rsi = rsi.iloc[-1]
 
-            # Generate signals based on RSI levels
-            if current_rsi < oversold:
+            # Check current position
+            has_position = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty > 0
+
+            # Signal-based trading: Only enter on oversold, exit on overbought
+            if current_rsi < oversold and not has_position:
+                # Enter position when oversold (only if not already holding)
                 signals[symbol] = 'OVERSOLD_BUY'
                 long_positions.append(symbol)
-            elif current_rsi > overbought:
+            elif current_rsi > overbought and has_position:
+                # Exit position when overbought
                 signals[symbol] = 'OVERBOUGHT_SELL'
-                # Exit position
+                # Don't add to long_positions - will be closed
+            elif has_position:
+                # Hold position until overbought
+                signals[symbol] = 'HOLD'
+                # Don't add to long_positions - prevents rebalancing
             else:
-                # Check if we have a position to hold
-                if symbol in positions and hasattr(positions[symbol], 'qty'):
-                    if positions[symbol].qty > 0:
-                        # Hold position until overbought
-                        signals[symbol] = 'HOLD'
-                        long_positions.append(symbol)
-                    else:
-                        signals[symbol] = 'NEUTRAL'
-                else:
-                    signals[symbol] = 'NEUTRAL'
+                signals[symbol] = 'NEUTRAL'
 
         except Exception as e:
             continue
@@ -684,9 +690,9 @@ def rsi_mean_reversion(
                 'weight': weight_per_position
             }
 
-    # Close positions not in long_positions
-    for symbol in market_data.keys():
-        if symbol not in long_positions:
+    # Close positions on overbought (explicit SELL signal)
+    for symbol, signal in signals.items():
+        if signal == 'OVERBOUGHT_SELL':
             if symbol in positions and hasattr(positions[symbol], 'qty'):
                 if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
@@ -1022,16 +1028,22 @@ def stochastic_momentum(
             bullish_cross = (prev_k <= prev_d) and (current_k > current_d) and (current_k < oversold)
             bearish_cross = (prev_k >= prev_d) and (current_k < current_d) and (current_k > overbought)
 
-            # Generate signals
-            if bullish_cross:
+            # Check current position
+            has_position = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty > 0
+
+            # Signal-based trading: Only enter on bullish cross, exit on bearish cross
+            if bullish_cross and not has_position:
+                # Enter position on bullish crossover (only if not already holding)
                 signals[symbol] = 'STOCH_OVERSOLD_BUY'
                 long_positions.append(symbol)
-            elif bearish_cross:
+            elif bearish_cross and has_position:
+                # Exit position on bearish crossover
                 signals[symbol] = 'STOCH_OVERBOUGHT_SELL'
-            elif current_k > current_d and current_k < overbought:
-                # Hold long position if still bullish
+                # Don't add to long_positions - will be closed
+            elif has_position:
+                # Hold position if still bullish
                 signals[symbol] = 'STOCH_HOLD'
-                long_positions.append(symbol)
+                # Don't add to long_positions - prevents rebalancing
             else:
                 signals[symbol] = 'NEUTRAL'
 
@@ -1050,9 +1062,9 @@ def stochastic_momentum(
                 'weight': weight_per_position
             }
 
-    # Close positions not in long_positions
-    for symbol in market_data.keys():
-        if symbol not in long_positions:
+    # Close positions on bearish crossover (explicit SELL signal)
+    for symbol, signal in signals.items():
+        if signal == 'STOCH_OVERBOUGHT_SELL':
             if symbol in positions and hasattr(positions[symbol], 'qty'):
                 if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
@@ -1301,6 +1313,7 @@ def adx_trend_filter(
     signals = {}
     long_positions = []
     short_positions = []
+    positions_to_close = []
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -1326,54 +1339,99 @@ def adx_trend_filter(
             # Check for strong trend
             strong_trend = current_adx > adx_threshold
 
-            # Generate signals based on trend strength and direction
+            # Check current position
+            has_long = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty > 0
+            has_short = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty < 0
+
+            # Signal-based trading: Only trade on NEW signals, not continuous rebalancing
             if strong_trend:
                 if plus_di > minus_di:
-                    signals[symbol] = 'ADX_LONG_TREND'
-                    long_positions.append(symbol)
-                elif minus_di > plus_di:
-                    if allow_short:
-                        signals[symbol] = 'ADX_SHORT_TREND'
-                        short_positions.append(symbol)
+                    # Bullish trend
+                    if not has_long:
+                        # Enter long position (only if we don't already have one)
+                        signals[symbol] = 'ADX_LONG_ENTRY'
+                        long_positions.append(symbol)
+                        if has_short:
+                            # Close short before going long
+                            positions_to_close.append(symbol)
                     else:
-                        signals[symbol] = 'ADX_BEARISH'
+                        # Already long - hold position
+                        signals[symbol] = 'ADX_LONG_HOLD'
+                        # Don't add to long_positions - prevents rebalancing
+                elif minus_di > plus_di:
+                    # Bearish trend
+                    if allow_short:
+                        if not has_short:
+                            # Enter short position (only if we don't already have one)
+                            signals[symbol] = 'ADX_SHORT_ENTRY'
+                            short_positions.append(symbol)
+                            if has_long:
+                                # Close long before going short
+                                positions_to_close.append(symbol)
+                        else:
+                            # Already short - hold position
+                            signals[symbol] = 'ADX_SHORT_HOLD'
+                            # Don't add to short_positions - prevents rebalancing
+                    else:
+                        # Bearish but shorts not allowed - close long if we have one
+                        signals[symbol] = 'ADX_BEARISH_EXIT'
+                        if has_long:
+                            positions_to_close.append(symbol)
                 else:
                     signals[symbol] = 'ADX_NEUTRAL'
             else:
-                signals[symbol] = 'ADX_WEAK_TREND'
+                # Weak trend - exit all positions
+                signals[symbol] = 'ADX_WEAK_TREND_EXIT'
+                if has_long or has_short:
+                    positions_to_close.append(symbol)
 
         except Exception as e:
             continue
 
-    # Calculate position sizing
+    # Calculate position sizing for NEW positions only
     total_positions = len(long_positions) + len(short_positions)
 
     if total_positions > 0:
         weight_per_position = 1.0 / total_positions
 
-        # Long orders
+        # Long orders (only for NEW positions)
         for symbol in long_positions:
             orders[symbol] = {
                 'action': 'target_weight',
-                'weight': weight_per_position
+                'weight': weight_per_position,
+                'meta': {
+                    'signal': signals.get(symbol, 'ADX_LONG'),
+                    'strategy': 'adx_trend_filter'
+                }
             }
 
-        # Short orders
+        # Short orders (only for NEW positions)
         for symbol in short_positions:
             orders[symbol] = {
                 'action': 'target_weight',
-                'weight': -weight_per_position
+                'weight': -weight_per_position,
+                'meta': {
+                    'signal': signals.get(symbol, 'ADX_SHORT'),
+                    'strategy': 'adx_trend_filter'
+                }
             }
 
-    # Close positions not in active positions
-    active_positions = long_positions + short_positions
-    for symbol in market_data.keys():
-        if symbol not in active_positions:
-            if symbol in positions and hasattr(positions[symbol], 'qty'):
-                if positions[symbol].qty != 0:
-                    orders[symbol] = {'action': 'close'}
+    # Close positions with explicit EXIT signals only
+    for symbol in positions_to_close:
+        if symbol in positions and hasattr(positions[symbol], 'qty'):
+            if positions[symbol].qty != 0:
+                orders[symbol] = {
+                    'action': 'close',
+                    'meta': {
+                        'signal': signals.get(symbol, 'ADX_EXIT'),
+                        'strategy': 'adx_trend_filter'
+                    }
+                }
 
     # Store strategy state
     context['signals'] = signals
+    context['long_positions'] = long_positions
+    context['short_positions'] = short_positions
+    context['positions_to_close'] = positions_to_close
 
     return orders
