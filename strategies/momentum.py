@@ -335,9 +335,9 @@ def kalman_ma_crossover_long_only(
 
     Parameters:
     -----------
-    Q_fast : float, default=0.01
+    Q_fast : float, default=0.014
         Process noise for fast filter (more responsive)
-    Q_slow : float, default=0.001
+    Q_slow : float, default=0.0006
         Process noise for slow filter (smoother)
     R : float, default=1.0
         Measurement noise (standard)
@@ -351,7 +351,7 @@ def kalman_ma_crossover_long_only(
 
     Example:
     --------
-    >>> params = {'Q_fast': 0.01, 'Q_slow': 0.001, 'R': 1.0}
+    >>> params = {'Q_fast': 0.014, 'Q_slow': 0.0006, 'R': 1.0}
     >>> result = backtester.run(
     ...     strategy=kalman_ma_crossover_long_only,
     ...     universe=['SPY', 'QQQ'],
@@ -359,8 +359,8 @@ def kalman_ma_crossover_long_only(
     ... )
     """
     # Strategy parameters
-    Q_fast = params.get('Q_fast', 0.01)
-    Q_slow = params.get('Q_slow', 0.001)
+    Q_fast = params.get('Q_fast', 0.014)
+    Q_slow = params.get('Q_slow', 0.0006)
     R = params.get('R', 1.0)
     min_periods = params.get('min_periods', 60)
 
