@@ -1691,6 +1691,37 @@ def render_results_sheet():
     st.markdown("---")  # Divider
     render_signal_analysis_section()
 
+    # Correlation Matrix Section - show if multiple symbols
+    if result.returns_correlation_matrix is not None and not result.returns_correlation_matrix.empty:
+        st.write("")  # Small spacer
+        st.markdown("---")  # Divider
+        st.caption("**🔗 Returns Correlation Matrix**")
+
+        try:
+            import matplotlib.pyplot as plt
+            import seaborn as sns
+
+            fig, ax = plt.subplots(figsize=(10, 8))
+            sns.heatmap(
+                result.returns_correlation_matrix,
+                annot=True,
+                fmt='.2f',
+                cmap='coolwarm',
+                center=0,
+                vmin=-1,
+                vmax=1,
+                square=True,
+                linewidths=0.5,
+                cbar_kws={'label': 'Correlation'},
+                ax=ax
+            )
+            ax.set_title('Returns Correlation Matrix', fontsize=14, fontweight='bold')
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close(fig)
+        except Exception as e:
+            st.warning(f"Could not generate correlation heatmap: {str(e)}")
+
     # Monthly Heatmap Comparison Section - compact
     st.write("")  # Small spacer
     st.markdown("---")  # Divider
