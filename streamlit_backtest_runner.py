@@ -942,7 +942,7 @@ def render_strategy_sheet():
                         strategy_params[param_name] = st.number_input(
                             param_name.replace('_', ' ').title(),
                             value=param_info['default'] if param_info['default'] is not None else 0.1,
-                            min_value=0.0, step=0.01, format="%.3f"
+                            min_value=0.0, step=0.0001, format="%.4f"
                         )
                     elif param_info['type'] == 'bool':
                         strategy_params[param_name] = st.checkbox(
