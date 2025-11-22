@@ -568,10 +568,13 @@ def calculate_monthly_metric_series(equity_curve_hash: str, equity_curve_dict: d
     return monthly
 
 
+@st.cache_data(show_spinner=False)
 def get_available_strategies():
     """
     Discover all available strategies from the strategies module
     Returns dict of {strategy_name: (module, function, docstring)}
+
+    Cached to avoid repeated module inspection on every page load.
     """
     strategies = {}
 
@@ -604,10 +607,14 @@ def get_available_strategies():
     return strategies
 
 
+@st.cache_data(show_spinner=False)
 def extract_strategy_params(strategy_func):
     """
     Extract parameter names and defaults from strategy docstring
     Returns dict of {param_name: {'type': type, 'default': value, 'description': str}}
+
+    Cached to avoid repeated docstring parsing when strategy is selected.
+    Uses function's qualified name for cache key.
     """
     doc = inspect.getdoc(strategy_func)
     if not doc:
@@ -674,6 +681,76 @@ def extract_strategy_params(strategy_func):
                 params[current_param]['description'] += ' ' + line
 
     return params
+
+
+# ===== Book Management Caching Functions =====
+
+@st.cache_resource(show_spinner=False)
+def get_book_manager(books_dir: str):
+    """
+    Get cached BookManager instance
+
+    Uses @st.cache_resource to maintain singleton BookManager.
+    This avoids repeatedly instantiating BookManager on every access.
+
+    Parameters:
+    -----------
+    books_dir : str
+        Path to books directory
+
+    Returns:
+    --------
+    BookManager
+        Cached BookManager instance
+    """
+    from backt.utils.books import BookManager
+    return BookManager(books_dir=books_dir)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def list_available_books(books_dir: str):
+    """
+    List available books with 60-second TTL
+
+    Caches book listing for 60 seconds to reduce filesystem scans.
+    TTL ensures fresh data after new books are created.
+
+    Parameters:
+    -----------
+    books_dir : str
+        Path to books directory
+
+    Returns:
+    --------
+    list
+        List of available book names
+    """
+    manager = get_book_manager(books_dir)
+    return manager.list_books()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_book_cached(books_dir: str, book_name: str):
+    """
+    Load book with 5-minute TTL
+
+    Caches loaded books for 5 minutes to avoid repeated JSON reads.
+    TTL ensures fresh data after book edits.
+
+    Parameters:
+    -----------
+    books_dir : str
+        Path to books directory
+    book_name : str
+        Name of book to load
+
+    Returns:
+    --------
+    Book
+        Loaded book object
+    """
+    manager = get_book_manager(books_dir)
+    return manager.load_book(book_name)
 
 
 def render_smart_etf_selector():
@@ -885,12 +962,9 @@ def render_strategy_sheet():
 
     # Load from Book Mode - NEW
     if selection_mode == "Load from Saved Book":
-        from backt.utils.books import BookManager
-
         # Use absolute path to saved_books in project root
-        books_dir = project_root / "saved_books"
-        manager = BookManager(books_dir=str(books_dir))
-        available_books = manager.list_books()
+        books_dir = str(project_root / "saved_books")
+        available_books = list_available_books(books_dir)
 
         if not available_books:
             st.info("📚 No saved books found. Run a backtest and save it as a book in the Results tab.")
@@ -910,7 +984,7 @@ def render_strategy_sheet():
 
         if selected_book_name:
             try:
-                book = manager.load_book(selected_book_name)
+                book = load_book_cached(books_dir, selected_book_name)
 
                 # Display book info
                 st.caption("**Book Information:**")
@@ -976,8 +1050,11 @@ def render_strategy_sheet():
                         try:
                             # Update book with new symbols
                             book.symbols = edited_symbols
+                            manager = get_book_manager(books_dir)
                             manager.save_book(book, overwrite=True)
                             st.success(f"✅ Book '{book.name}' updated with {len(edited_symbols)} symbols!")
+                            # Clear cache to reflect updated book
+                            st.cache_data.clear()
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Failed to update book: {str(e)}")
@@ -2219,8 +2296,8 @@ def render_results_sheet():
                     )
 
                     # Save book
-                    books_dir = project_root / "saved_books"
-                    manager = BookManager(books_dir=str(books_dir))
+                    books_dir = str(project_root / "saved_books")
+                    manager = get_book_manager(books_dir)
 
                     # Check if book already exists
                     if manager.book_exists(quick_book_name):
@@ -2229,6 +2306,8 @@ def render_results_sheet():
                         st.caption(f"Existing book location: {manager.books_dir / f'{quick_book_name}.json'}")
                     else:
                         manager.save_book(book)
+                        # Clear cache to reflect new book
+                        st.cache_data.clear()
                         st.success(f"✅ Book '{quick_book_name}' saved successfully!")
                         st.info(f"📂 Saved to: {manager.books_dir / f'{quick_book_name}.json'}")
                         st.caption("💡 Load this book in the Strategy tab under 'Load from Saved Book'")
