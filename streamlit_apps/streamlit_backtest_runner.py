@@ -32,6 +32,7 @@ logging.getLogger('streamlit.runtime.caching.cache_data_api').setLevel(logging.E
 logging.getLogger('streamlit').setLevel(logging.ERROR)
 
 import streamlit as st
+from streamlit_navigation_bar import st_navbar
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -196,20 +197,9 @@ st.set_page_config(
 )
 
 
-# Custom CSS - Professional styling
+# Minimal CSS - Only hide sidebar
 st.markdown("""
 <style>
-    /* Main theme colors */
-    :root {
-        --primary-color: #1f77b4;
-        --secondary-color: #ff7f0e;
-        --success-color: #2ca02c;
-        --warning-color: #d62728;
-        --bg-light: #f8f9fa;
-        --bg-dark: #2c3e50;
-        --text-muted: #6c757d;
-    }
-
     /* HIDE SIDEBAR COMPLETELY */
     [data-testid="stSidebar"] {
         display: none !important;
@@ -218,262 +208,6 @@ st.markdown("""
     /* Hide sidebar collapse button */
     [data-testid="collapsedControl"] {
         display: none !important;
-    }
-
-    /* Expand main content to full width (no sidebar) */
-    .main .block-container {
-        max-width: 100% !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
-    }
-
-    /* FIXED TABS AT TOP - Always visible */
-    .stTabs {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        z-index: 999999 !important;
-        background-color: white !important;
-        padding-top: 0.5rem !important;
-        padding-bottom: 0.5rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-        margin: 0 !important;
-    }
-
-    /* Add padding to content so it doesn't hide behind fixed header */
-    .main .block-container {
-        padding-top: 80px !important;
-        padding-bottom: 2rem !important;
-    }
-
-    /* Header styling */
-    h1 {
-        font-size: 2.1rem !important;
-        font-weight: 600 !important;
-        color: #1f77b4 !important;
-        margin-bottom: 0.6rem !important;
-    }
-
-    h2 {
-        font-size: 1.4rem !important;
-        font-weight: 500 !important;
-        margin-top: 1.1rem !important;
-        margin-bottom: 0.9rem !important;
-    }
-
-    h3 {
-        font-size: 1.15rem !important;
-        font-weight: 500 !important;
-        margin-top: 0.9rem !important;
-        margin-bottom: 0.6rem !important;
-    }
-
-    /* Compact tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: #f8f9fa;
-        padding: 0.6rem;
-        border-radius: 8px;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        height: 44px !important;
-        padding: 0 18px !important;
-        font-size: 0.92rem !important;
-        border-radius: 6px;
-        transition: all 0.2s ease;
-    }
-
-    .stTabs [data-baseweb="tab"]:hover {
-        background-color: #e9ecef;
-    }
-
-    .stTabs [aria-selected="true"] {
-        background-color: #1f77b4 !important;
-        color: white !important;
-    }
-
-    /* Compact buttons */
-    .stButton > button {
-        font-size: 0.88rem !important;
-        padding: 0.45rem 1.1rem !important;
-        border-radius: 6px !important;
-        font-weight: 500 !important;
-        transition: all 0.2s ease !important;
-    }
-
-    .stButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-
-    /* Primary button styling */
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #1f77b4 0%, #1557a0 100%) !important;
-        box-shadow: 0 2px 8px rgba(31,119,180,0.3);
-    }
-
-    /* Metric cards - more professional */
-    [data-testid="stMetricValue"] {
-        font-size: 1.9rem !important;
-        font-weight: 600 !important;
-    }
-
-    [data-testid="stMetricLabel"] {
-        font-size: 0.88rem !important;
-        color: #6c757d !important;
-        font-weight: 500 !important;
-    }
-
-    [data-testid="stMetricDelta"] {
-        font-size: 0.85rem !important;
-    }
-
-    /* Compact forms */
-    .stTextInput > div > div > input,
-    .stNumberInput > div > div > input,
-    .stDateInput > div > div > input {
-        font-size: 0.88rem !important;
-        padding: 0.45rem 0.65rem !important;
-    }
-
-    /* Selectbox - prevent dropdown clipping */
-    .stSelectbox {
-        overflow: visible !important;
-    }
-
-    .stSelectbox > div > div {
-        font-size: 0.88rem !important;
-        overflow: visible !important;
-    }
-
-    .stSelectbox div[data-baseweb="select"] {
-        min-width: 100% !important;
-        overflow: visible !important;
-    }
-
-    .stSelectbox div[data-baseweb="select"] > div {
-        white-space: normal !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-        min-height: 2.4rem !important;
-    }
-
-    /* Ensure parent containers don't clip dropdown */
-    .element-container {
-        overflow: visible !important;
-    }
-
-    /* Dropdown menu - compact sizing */
-    [data-baseweb="popover"] {
-        max-width: 280px !important;
-        max-height: 250px !important;
-    }
-
-    [role="option"] {
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        padding: 0.35rem 0.7rem !important;
-        font-size: 0.85rem !important;
-    }
-
-    [role="listbox"] {
-        max-width: 280px !important;
-        max-height: 250px !important;
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-    }
-
-    [role="listbox"]::-webkit-scrollbar-track {
-        background: #f1f1f1 !important;
-        border-radius: 5px !important;
-    }
-
-    [role="listbox"]::-webkit-scrollbar-thumb {
-        background: #888 !important;
-        border-radius: 5px !important;
-    }
-
-    [role="listbox"]::-webkit-scrollbar-thumb:hover {
-        background: #555 !important;
-    }
-
-    /* Labels - smaller and muted */
-    label {
-        font-size: 0.88rem !important;
-        font-weight: 500 !important;
-        color: #495057 !important;
-    }
-
-    /* Sidebar styling - HIDDEN (kept for reference if ever needed) */
-    /* [data-testid="stSidebar"] {
-        background-color: #f8f9fa;
-    }
-
-    [data-testid="stSidebar"] h2 {
-        font-size: 1.15rem !important;
-        color: #2c3e50 !important;
-    } */
-
-    /* Caption text - smaller */
-    .stCaption {
-        font-size: 0.8rem !important;
-        color: #6c757d !important;
-    }
-
-    /* Compact expanders */
-    .streamlit-expanderHeader {
-        font-size: 0.92rem !important;
-        font-weight: 500 !important;
-        padding: 0.6rem 1.1rem !important;
-    }
-
-    /* Success/Warning/Error messages - compact */
-    .stSuccess, .stWarning, .stError, .stInfo {
-        padding: 0.6rem 1.1rem !important;
-        font-size: 0.88rem !important;
-    }
-
-    /* Divider - subtle */
-    hr {
-        margin: 1.1rem 0 !important;
-        border-color: #e9ecef !important;
-    }
-
-    /* Dataframe styling */
-    .dataframe {
-        font-size: 0.8rem !important;
-    }
-
-    /* Remove extra spacing */
-    .element-container {
-        margin-bottom: 0.4rem !important;
-    }
-
-    /* Compact columns */
-    [data-testid="column"] {
-        padding: 0 0.4rem !important;
-    }
-
-    /* Compact forms */
-    .stForm {
-        border: none !important;
-        padding: 0.6rem !important;
-    }
-
-    /* Compact captions */
-    .stCaption {
-        margin-bottom: 0.3rem !important;
-        margin-top: 0.4rem !important;
-    }
-
-    /* Tighter input fields */
-    .stTextInput input, .stNumberInput input, .stDateInput input {
-        height: 2.4rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -3437,28 +3171,25 @@ def render_book_manager_sheet():
 def main():
     """Main application"""
 
-    # Create tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "⚙️ Configuration",
-        "📈 Strategy",
-        "📊 Results",
-        "🔬 CPCV Validation",
-        "📚 Book Manager"
-    ])
+    # Create navigation bar (fixed at top)
+    page = st_navbar(
+        ["Configuration", "Strategy", "Results", "CPCV Validation", "Book Manager"],
+        selected=st.session_state.get('current_page', 'Configuration')
+    )
 
-    with tab1:
+    # Store current page
+    st.session_state.current_page = page
+
+    # Render the selected page
+    if page == "Configuration":
         render_configuration_sheet()
-
-    with tab2:
+    elif page == "Strategy":
         render_strategy_sheet()
-
-    with tab3:
+    elif page == "Results":
         render_results_sheet()
-
-    with tab4:
+    elif page == "CPCV Validation":
         render_cpcv_validation_sheet()
-
-    with tab5:
+    elif page == "Book Manager":
         render_book_manager_sheet()
 
     # Sidebar - DISABLED (hidden via CSS)
