@@ -32,7 +32,6 @@ logging.getLogger('streamlit.runtime.caching.cache_data_api').setLevel(logging.E
 logging.getLogger('streamlit').setLevel(logging.ERROR)
 
 import streamlit as st
-from streamlit_navigation_bar import st_navbar
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -3171,26 +3170,18 @@ def render_book_manager_sheet():
 def main():
     """Main application"""
 
-    # Create navigation bar (fixed at top)
-    page = st_navbar(
-        ["Configuration", "Strategy", "Results", "CPCV Validation", "Book Manager"],
-        selected=st.session_state.get('current_page', 'Configuration')
-    )
+    # Define pages using Streamlit's native navigation (top position)
+    pages = [
+        st.Page(render_configuration_sheet, title="⚙️ Configuration"),
+        st.Page(render_strategy_sheet, title="📈 Strategy"),
+        st.Page(render_results_sheet, title="📊 Results"),
+        st.Page(render_cpcv_validation_sheet, title="🔬 CPCV Validation"),
+        st.Page(render_book_manager_sheet, title="📚 Book Manager"),
+    ]
 
-    # Store current page
-    st.session_state.current_page = page
-
-    # Render the selected page
-    if page == "Configuration":
-        render_configuration_sheet()
-    elif page == "Strategy":
-        render_strategy_sheet()
-    elif page == "Results":
-        render_results_sheet()
-    elif page == "CPCV Validation":
-        render_cpcv_validation_sheet()
-    elif page == "Book Manager":
-        render_book_manager_sheet()
+    # Create navigation at top
+    pg = st.navigation(pages, position="top")
+    pg.run()
 
     # Sidebar - DISABLED (hidden via CSS)
     # Uncomment if you want to re-enable the sidebar
