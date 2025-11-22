@@ -934,8 +934,10 @@ def render_strategy_sheet():
         st.warning("⚠️ Please configure backtest parameters first in the 'Configuration' tab.")
         return
 
-    # Get available strategies
-    strategies = get_available_strategies()
+    # Get available strategies (cache in session state to avoid repeated module inspection)
+    if 'available_strategies' not in st.session_state:
+        st.session_state.available_strategies = get_available_strategies()
+    strategies = st.session_state.available_strategies
 
     if not strategies:
         st.error("No strategies found! Make sure strategies are properly defined in the strategies/ folder.")
@@ -2356,30 +2358,58 @@ def render_single_strategy_cpcv():
     st.caption("**Single Strategy Validation**")
     st.write("Validate one strategy configuration across multiple train/test paths to detect overfitting.")
 
-    # CPCV Configuration
+    # CPCV Configuration - Use form to batch inputs and prevent page rerun on every change
     st.write("")
     st.caption("**CPCV Settings**")
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        n_splits = st.number_input("Number of Folds", value=10, min_value=3, max_value=20, step=1)
-    with col2:
-        n_test_splits = st.number_input("Test Folds per Path", value=2, min_value=1, max_value=5, step=1)
-    with col3:
-        purge_pct = st.number_input("Purge %", value=5.0, min_value=0.0, max_value=20.0, step=1.0) / 100
-    with col4:
-        embargo_pct = st.number_input("Embargo %", value=2.0, min_value=0.0, max_value=10.0, step=1.0) / 100
+    # Use form to batch all inputs together - only reruns when submitted
+    with st.form(key="cpcv_settings_form"):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            n_splits = st.number_input("Number of Folds", value=10, min_value=3, max_value=20, step=1)
+        with col2:
+            n_test_splits = st.number_input("Test Folds per Path", value=2, min_value=1, max_value=5, step=1)
+        with col3:
+            purge_pct = st.number_input("Purge %", value=5.0, min_value=0.0, max_value=20.0, step=1.0) / 100
+        with col4:
+            embargo_pct = st.number_input("Embargo %", value=2.0, min_value=0.0, max_value=10.0, step=1.0) / 100
 
-    # Calculate number of paths
-    import math
-    n_paths = math.comb(n_splits, n_test_splits)
-    st.caption(f"This will generate **{n_paths} validation paths** (C({n_splits},{n_test_splits}))")
+        # Calculate number of paths (only when form is submitted)
+        import math
+        n_paths = math.comb(n_splits, n_test_splits)
+        st.caption(f"This will generate **{n_paths} validation paths** (C({n_splits},{n_test_splits}))")
 
-    # Run Button
+        # Submit button for form
+        st.write("")
+        col1, col2, col3 = st.columns([2, 1, 2])
+        with col2:
+            form_submitted = st.form_submit_button("⚙️ Update Settings", use_container_width=True)
+
+    # Store settings in session state when form is submitted
+    if form_submitted or 'cpcv_n_splits' not in st.session_state:
+        st.session_state.cpcv_n_splits = n_splits
+        st.session_state.cpcv_n_test_splits = n_test_splits
+        st.session_state.cpcv_purge_pct = purge_pct
+        st.session_state.cpcv_embargo_pct = embargo_pct
+        st.session_state.cpcv_n_paths = n_paths
+
+    # Display current settings
+    if 'cpcv_n_splits' in st.session_state:
+        st.info(f"**Current Settings:** {st.session_state.cpcv_n_splits} folds, {st.session_state.cpcv_n_test_splits} test folds/path, {st.session_state.cpcv_purge_pct*100:.1f}% purge, {st.session_state.cpcv_embargo_pct*100:.1f}% embargo → **{st.session_state.cpcv_n_paths} paths**")
+
+    # Run Button (separate from form to avoid conflicts)
     st.write("")
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
         run_validation = st.button("🚀 Run CPCV Validation", type="primary", use_container_width=True)
+
+    # Use session state values for validation
+    if 'cpcv_n_splits' in st.session_state:
+        n_splits = st.session_state.cpcv_n_splits
+        n_test_splits = st.session_state.cpcv_n_test_splits
+        purge_pct = st.session_state.cpcv_purge_pct
+        embargo_pct = st.session_state.cpcv_embargo_pct
+        n_paths = st.session_state.cpcv_n_paths
 
     if run_validation:
         with st.spinner(f"Running CPCV validation across {n_paths} paths... This may take a few minutes."):
@@ -2409,8 +2439,10 @@ def render_single_strategy_cpcv():
 
             symbols = config_dict.get('symbols', ['SPY'])
 
-            # Get strategy function
-            strategies = get_available_strategies()
+            # Get strategy function (cache in session state to avoid repeated calls)
+            if 'available_strategies' not in st.session_state:
+                st.session_state.available_strategies = get_available_strategies()
+            strategies = st.session_state.available_strategies
             strategy_func = strategies[strategy_name]['function']
 
             # Create CPCV config (with parallel processing and numba JIT enabled)
@@ -2685,8 +2717,10 @@ def render_parameter_optimization_cpcv():
     config = st.session_state.config
     strategy_name = st.session_state.selected_strategy_name
 
-    # Get strategy function
-    strategies = get_available_strategies()
+    # Get strategy function (cache in session state to avoid repeated calls)
+    if 'available_strategies' not in st.session_state:
+        st.session_state.available_strategies = get_available_strategies()
+    strategies = st.session_state.available_strategies
     strategy_func = strategies[strategy_name]['function']
 
     st.write("")
