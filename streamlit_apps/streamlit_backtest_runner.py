@@ -21,8 +21,7 @@ if str(project_root) not in sys.path:
 import warnings
 import logging
 
-# Suppress Streamlit deprecation and worker warnings
-warnings.filterwarnings('ignore', message='.*use_container_width.*')
+# Suppress Streamlit worker warnings
 warnings.filterwarnings('ignore', message='.*missing ScriptRunContext.*')
 warnings.filterwarnings('ignore', message='.*No runtime found.*')
 warnings.filterwarnings('ignore', message='.*to view a Streamlit app.*')
@@ -234,21 +233,21 @@ st.markdown("""
         top: 0 !important;
         z-index: 999 !important;
         background-color: white !important;
-        padding-top: 1rem !important;
+        padding-top: 0.5rem !important;
         padding-bottom: 0.5rem !important;
-        margin-top: -2rem !important;
-        margin-left: -2rem !important;
-        margin-right: -2rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
+        margin-bottom: 1rem !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
     }
 
     /* Reduce overall padding and allow dropdown overflow */
     .block-container {
-        padding-top: 2rem !important;
+        padding-top: 1rem !important;
         padding-bottom: 1.2rem !important;
-        overflow: visible !important;
+    }
+
+    /* Ensure main content scrolls properly */
+    .main {
+        overflow-y: auto !important;
     }
 
     /* Header styling */
@@ -817,7 +816,7 @@ def render_smart_etf_selector():
                 label_visibility="collapsed"
             )
         with col2:
-            if st.button("Apply Preset", type="primary", use_container_width=True):
+            if st.button("Apply Preset", type="primary", width="stretch"):
                 st.session_state.selected_symbols = ETF_PRESETS[selected_preset].copy()
                 st.rerun()
 
@@ -861,7 +860,7 @@ def render_smart_etf_selector():
 
         col1, col2 = st.columns([2, 1])
         with col2:
-            if st.button("Update Symbols", type="primary", use_container_width=True):
+            if st.button("Update Symbols", type="primary", width="stretch"):
                 # Parse manual input
                 symbols = [s.strip().upper() for s in manual_input.split(',') if s.strip()]
                 st.session_state.selected_symbols = symbols
@@ -884,12 +883,12 @@ def render_smart_etf_selector():
             st.caption("**No symbols selected**")
 
     with col2:
-        if st.button("Clear All", use_container_width=True):
+        if st.button("Clear All", width="stretch"):
             st.session_state.selected_symbols = []
             st.rerun()
 
     with col3:
-        if st.button("Select All ETFs", use_container_width=True):
+        if st.button("Select All ETFs", width="stretch"):
             # Collect all ETFs from all categories
             all_etfs = []
             for category_etfs in ETF_UNIVERSE.values():
@@ -942,7 +941,7 @@ def render_configuration_sheet():
         # Compact save button
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            submitted = st.form_submit_button("Save Configuration", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("Save Configuration", type="primary", width="stretch")
 
         if submitted:
             # Store in session state
@@ -1077,7 +1076,7 @@ def render_strategy_sheet():
                             "💾 Update Book Symbols",
                             disabled=not symbols_changed,
                             type="primary" if symbols_changed else "secondary",
-                            use_container_width=True,
+                            width="stretch",
                             key=f"update_book_symbols_{selected_book_name}"
                         )
 
@@ -1230,7 +1229,7 @@ def render_strategy_sheet():
     st.write("")
     col1, col2, col3, col4 = st.columns([2, 1, 1, 2])
     with col2:
-        run_button = st.button("🚀 Run Backtest", type="primary", use_container_width=True)
+        run_button = st.button("🚀 Run Backtest", type="primary", width="stretch")
 
     if run_button:
         # Clear previous results to prevent memory buildup
@@ -1746,31 +1745,31 @@ def render_signal_analysis_section():
     col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
-        if st.button("Last Month", use_container_width=True, key="btn_last_month"):
+        if st.button("Last Month", width="stretch", key="btn_last_month"):
             st.session_state.signal_window_start = (full_end - pd.Timedelta(days=30)).date()
             st.session_state.signal_window_end = full_end.date()
             st.rerun()
 
     with col2:
-        if st.button("Last 3 Months", use_container_width=True, key="btn_last_3m"):
+        if st.button("Last 3 Months", width="stretch", key="btn_last_3m"):
             st.session_state.signal_window_start = (full_end - pd.Timedelta(days=90)).date()
             st.session_state.signal_window_end = full_end.date()
             st.rerun()
 
     with col3:
-        if st.button("Last 6 Months", use_container_width=True, key="btn_last_6m"):
+        if st.button("Last 6 Months", width="stretch", key="btn_last_6m"):
             st.session_state.signal_window_start = (full_end - pd.Timedelta(days=180)).date()
             st.session_state.signal_window_end = full_end.date()
             st.rerun()
 
     with col4:
-        if st.button("Last Year", use_container_width=True, key="btn_last_year"):
+        if st.button("Last Year", width="stretch", key="btn_last_year"):
             st.session_state.signal_window_start = (full_end - pd.Timedelta(days=365)).date()
             st.session_state.signal_window_end = full_end.date()
             st.rerun()
 
     with col5:
-        if st.button("Full Range", use_container_width=True, key="btn_full_range"):
+        if st.button("Full Range", width="stretch", key="btn_full_range"):
             st.session_state.signal_window_start = full_start.date()
             st.session_state.signal_window_end = full_end.date()
             st.rerun()
@@ -1801,7 +1800,7 @@ def render_signal_analysis_section():
         )
 
     with col3:
-        if st.button("Reset to Full Range", use_container_width=True, key="btn_reset"):
+        if st.button("Reset to Full Range", width="stretch", key="btn_reset"):
             st.session_state.signal_window_start = full_start.date()
             st.session_state.signal_window_end = full_end.date()
             st.rerun()
@@ -1825,7 +1824,7 @@ def render_signal_analysis_section():
 
     if fig is not None:
         # Display the chart
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # Trade statistics for the window
         if trades_window is not None and not trades_window.empty:
@@ -1867,7 +1866,7 @@ def render_signal_analysis_section():
 
                 st.dataframe(
                     display_trades[display_cols],
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config={
                         'meta_reason': st.column_config.TextColumn(
@@ -2110,7 +2109,7 @@ def render_results_sheet():
                     'max_drawdown': '{:.2%}',
                     'win_rate': '{:.1%}'
                 }),
-                use_container_width=True
+                width="stretch"
             )
 
         # Per-symbol PnL chart
@@ -2137,7 +2136,7 @@ def render_results_sheet():
 
     # Full Metrics Table - compact
     with st.expander("📊 Detailed Metrics", expanded=False):
-        st.dataframe(metrics_df, use_container_width=True)
+        st.dataframe(metrics_df, width="stretch")
 
     # Trade History (Detailed) - compact
     with st.expander("💼 Trade History", expanded=False):
@@ -2171,7 +2170,7 @@ def render_results_sheet():
             }).round(2)
             symbol_trades['num_fills'] = trades_df.groupby('symbol').size()
             symbol_trades = symbol_trades.sort_values('num_fills', ascending=False)
-            st.dataframe(symbol_trades, use_container_width=True)
+            st.dataframe(symbol_trades, width="stretch")
 
             # Full trade log - compact
             st.caption("**Full Trade Log:**")
@@ -2218,7 +2217,7 @@ def render_results_sheet():
 
             st.dataframe(
                 display_df.iloc[start_idx:end_idx],
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config=column_config
             )
@@ -2268,7 +2267,7 @@ def render_results_sheet():
             save_button = st.button(
                 "💾 Save Book",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 key="quick_save_book_button"
             )
 
@@ -2416,7 +2415,7 @@ def render_single_strategy_cpcv():
         st.write("")
         col1, col2, col3 = st.columns([2, 1, 2])
         with col2:
-            form_submitted = st.form_submit_button("⚙️ Update Settings", use_container_width=True)
+            form_submitted = st.form_submit_button("⚙️ Update Settings", width="stretch")
 
     # Store settings in session state when form is submitted
     if form_submitted or 'cpcv_n_splits' not in st.session_state:
@@ -2434,7 +2433,7 @@ def render_single_strategy_cpcv():
     st.write("")
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
-        run_validation = st.button("🚀 Run CPCV Validation", type="primary", use_container_width=True)
+        run_validation = st.button("🚀 Run CPCV Validation", type="primary", width="stretch")
 
     # Use session state values for validation
     if 'cpcv_n_splits' in st.session_state:
@@ -2600,17 +2599,17 @@ def display_cpcv_results(result):
 
     # Create path distribution chart
     fig = create_path_distribution_chart(result)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # Performance distribution
     col1, col2 = st.columns(2)
     with col1:
         fig_dist = create_sharpe_distribution_chart(result)
-        st.plotly_chart(fig_dist, use_container_width=True)
+        st.plotly_chart(fig_dist, width="stretch")
 
     with col2:
         fig_scatter = create_path_scatter_chart(result)
-        st.plotly_chart(fig_scatter, use_container_width=True)
+        st.plotly_chart(fig_scatter, width="stretch")
 
     # Detailed path results table
     st.write("")
@@ -2626,7 +2625,7 @@ def display_cpcv_results(result):
             })
 
         path_df = pd.DataFrame(path_data)
-        st.dataframe(path_df, use_container_width=True, hide_index=True)
+        st.dataframe(path_df, width="stretch", hide_index=True)
 
 
 def create_path_distribution_chart(result):
@@ -2951,7 +2950,7 @@ def render_parameter_optimization_cpcv():
             st.write("")
             col1, col2, col3 = st.columns([2, 1, 2])
             with col2:
-                param_form_submitted = st.form_submit_button("⚙️ Update Parameters", use_container_width=True)
+                param_form_submitted = st.form_submit_button("⚙️ Update Parameters", width="stretch")
 
         # Process form data after submission
         if param_form_submitted or 'param_grid_cache' not in st.session_state:
@@ -3016,7 +3015,7 @@ def render_parameter_optimization_cpcv():
     st.write("")
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
-        run_optimization = st.button("🚀 Run Optimization", type="primary", use_container_width=True)
+        run_optimization = st.button("🚀 Run Optimization", type="primary", width="stretch")
 
     if run_optimization and param_grid:
         from backt.optimization.optimizer import StrategyOptimizer
@@ -3157,7 +3156,7 @@ def render_parameter_optimization_cpcv():
                 top_df[display_cols].style.format({
                     col: "{:.4f}" for col in metric_cols
                 }),
-                use_container_width=True
+                width="stretch"
             )
 
             # CPCV Validation Results
@@ -3187,7 +3186,7 @@ def render_parameter_optimization_cpcv():
                         lambda x: 'background-color: #d4edda' if x == '✅ Pass' else 'background-color: #f8d7da',
                         subset=['Validation']
                     ),
-                    use_container_width=True
+                    width="stretch"
                 )
 
                 # Recommendation
@@ -3272,7 +3271,7 @@ def render_book_manager_sheet():
         filter_strategy = st.selectbox("Filter by Strategy", ["All"] + all_strategies, key="bm_filter_strategy")
 
     with col3:
-        if st.button("🔄 Refresh", use_container_width=True):
+        if st.button("🔄 Refresh", width="stretch"):
             st.rerun()
 
     if not selected_name:
@@ -3293,7 +3292,7 @@ def render_book_manager_sheet():
             "Tags": ", ".join(b.tags[:3]) if b.tags else "-",
             "Updated": b.updated_at[:10]
         } for b in display_books]
-        st.dataframe(pd.DataFrame(book_data), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(book_data), width="stretch", hide_index=True)
         return
 
     # Load book
@@ -3317,7 +3316,7 @@ def render_book_manager_sheet():
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        if st.button("💾 Save", disabled=not st.session_state.bm_modified, type="primary", use_container_width=True):
+        if st.button("💾 Save", disabled=not st.session_state.bm_modified, type="primary", width="stretch"):
             editor.save_book(book, create_backup=True)
             st.session_state.bm_modified = False
             st.session_state.bm_original = Book.from_dict(book.to_dict())
@@ -3325,13 +3324,13 @@ def render_book_manager_sheet():
             st.rerun()
 
     with col2:
-        if st.button("↩️ Revert", disabled=not st.session_state.bm_modified, use_container_width=True):
+        if st.button("↩️ Revert", disabled=not st.session_state.bm_modified, width="stretch"):
             st.session_state.bm_selected_book = Book.from_dict(original.to_dict())
             st.session_state.bm_modified = False
             st.rerun()
 
     with col3:
-        if st.button("🔍 Validate", use_container_width=True):
+        if st.button("🔍 Validate", width="stretch"):
             is_valid, warnings = editor.validate_book(book)
             if is_valid:
                 st.success("✅ Valid")
@@ -3340,20 +3339,20 @@ def render_book_manager_sheet():
                     st.warning(f"⚠️ {w}")
 
     with col4:
-        if st.button("🗑️ Delete", use_container_width=True, type="secondary"):
+        if st.button("🗑️ Delete", width="stretch", type="secondary"):
             st.session_state.show_delete = True
 
     if st.session_state.get('show_delete', False):
         st.error(f"⚠️ Delete '{book.name}'?")
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("✅ Confirm", type="primary", use_container_width=True):
+            if st.button("✅ Confirm", type="primary", width="stretch"):
                 editor.manager.delete_book(book.name)
                 st.session_state.bm_selected_book = None
                 st.session_state.show_delete = False
                 st.rerun()
         with c2:
-            if st.button("❌ Cancel", use_container_width=True):
+            if st.button("❌ Cancel", width="stretch"):
                 st.session_state.show_delete = False
                 st.rerun()
 
@@ -3552,13 +3551,13 @@ def main():
 
         # Reset button - compact
         st.write("")
-        if st.button("🔄 Reset Session", use_container_width=True, help="Clear all session data"):
+        if st.button("🔄 Reset Session", width="stretch", help="Clear all session data"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
 
         # Clear cache button - helps with performance after multiple runs
-        if st.button("🗑️ Clear Cache", use_container_width=True, help="Clear cached data (use if app becomes slow)"):
+        if st.button("🗑️ Clear Cache", width="stretch", help="Clear cached data (use if app becomes slow)"):
             st.cache_data.clear()
             st.success("Cache cleared! App performance should improve.")
             st.rerun()
