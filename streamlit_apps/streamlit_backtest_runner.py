@@ -249,10 +249,14 @@ st.markdown("""
         padding-bottom: 1.2rem !important;
     }
 
-    /* Ensure main content area fills properly */
-    .main {
-        overflow-y: auto !important;
-        height: 100vh !important;
+    /* Ensure scrollbar is visible */
+    section.main {
+        overflow-y: scroll !important;
+    }
+
+    /* Make sure the main content area shows scrollbar */
+    .main .block-container {
+        overflow: visible !important;
     }
 
     /* Header styling */
