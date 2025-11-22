@@ -568,13 +568,13 @@ def calculate_monthly_metric_series(equity_curve_hash: str, equity_curve_dict: d
     return monthly
 
 
-@st.cache_data(show_spinner=False)
 def get_available_strategies():
     """
     Discover all available strategies from the strategies module
     Returns dict of {strategy_name: (module, function, docstring)}
 
-    Cached to avoid repeated module inspection on every page load.
+    Note: Cannot be cached because it returns function objects which aren't hashable.
+    However, this operation is fast enough (~100-200ms) that caching isn't critical.
     """
     strategies = {}
 
@@ -608,15 +608,15 @@ def get_available_strategies():
 
 
 @st.cache_data(show_spinner=False)
-def extract_strategy_params(strategy_func):
+def extract_strategy_params(_strategy_func):
     """
     Extract parameter names and defaults from strategy docstring
     Returns dict of {param_name: {'type': type, 'default': value, 'description': str}}
 
     Cached to avoid repeated docstring parsing when strategy is selected.
-    Uses function's qualified name for cache key.
+    Note: _strategy_func has underscore prefix to tell Streamlit not to hash it (functions aren't hashable).
     """
-    doc = inspect.getdoc(strategy_func)
+    doc = inspect.getdoc(_strategy_func)
     if not doc:
         return {}
 
