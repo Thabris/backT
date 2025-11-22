@@ -100,3 +100,19 @@ test_scripts/*.ipynb
 test_scripts/*.csv
 test_scripts/*.png
 test_scripts/*.html
+
+# Market data database (too large for git - download with download_market_data.py)
+market_data.db
+
+# Test output files
+etf_test_results.txt
+etf_test_results_final.txt
+macd_results.json
+
+# Temporary files
+nul
+.virtual_documents/
+notebooks/streamlit_temp.ipynb
+
+# Anaconda project files
+anaconda_projects/

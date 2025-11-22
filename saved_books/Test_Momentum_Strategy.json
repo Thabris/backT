@@ -1,0 +1,24 @@
+{
+  "name": "Test_Momentum_Strategy",
+  "strategy_module": "MOMENTUM",
+  "strategy_name": "ma_crossover_long_only",
+  "strategy_params": {
+    "fast_ma": 20,
+    "slow_ma": 50,
+    "min_periods": 60
+  },
+  "symbols": [
+    "AAPL",
+    "MSFT",
+    "GOOGL"
+  ],
+  "description": "Test momentum strategy for tech stocks",
+  "created_at": "2025-10-27T22:32:09.788802",
+  "updated_at": "2025-10-27T22:32:09.792144",
+  "tags": [
+    "momentum",
+    "long-only",
+    "tech"
+  ],
+  "metadata": {}
+}

@@ -1,0 +1,3 @@
+@echo off
+echo Starting Book Manager...
+streamlit run streamlit_book_manager.py

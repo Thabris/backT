@@ -1,0 +1,43 @@
+{
+  "name": "kalmanMACrossLS-2011202510-top10-sortino-exCor75",
+  "strategy_module": "MOMENTUM",
+  "strategy_name": "kalman_ma_crossover_long_short",
+  "strategy_params": {
+    "Q_fast": 0.01,
+    "Q_slow": 0.001,
+    "R": 1.0,
+    "min_periods": 60,
+    "initial_capital": 100000
+  },
+  "symbols": [
+    "VIXM",
+    "SVXY",
+    "VXX",
+    "UCO",
+    "DBMF",
+    "GVAL",
+    "GSG",
+    "VB",
+    "BND",
+    "SPHQ"
+  ],
+  "description": "Top 10 symbols ranked by Sortino ratio using kalman_ma_crossover_long_short strategy. Ranked on 2025-11-09 21:57:42 using data from 2011-01-01 to 2025-11-06. Average Sortino: 0.488, Average Return: 192.30%",
+  "created_at": "2025-11-09T21:57:42.150191",
+  "updated_at": "2025-11-09T21:57:42.153861",
+  "tags": [
+    "ranked",
+    "kalman_ma_crossover_long_short",
+    "top_10"
+  ],
+  "metadata": {
+    "ranking_date": "2025-11-09 21:57:42",
+    "ranking_period": "2011-01-01 to 2025-11-06",
+    "ranking_metric": "sortino_ratio",
+    "num_symbols": 10,
+    "avg_sortino": 0.4879951655885396,
+    "avg_sharpe": 0.22634598951658846,
+    "avg_return": 1.9229687010601189,
+    "top_symbol": "VIXM",
+    "top_sortino": 1.1723460062171505
+  }
+}

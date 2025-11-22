@@ -11,7 +11,12 @@ Run with: streamlit run streamlit_backtest_runner.py
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent))
+
+# Add parent directory (project root) to path to find backt and strategies modules
+# Use absolute path to ensure it works regardless of how the script is run
+project_root = Path(r"C:\Users\maxim\Documents\Projects\backtester2")
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 import warnings
 import logging
@@ -125,7 +130,6 @@ ETF_UNIVERSE = {
         "UVXY": "VIX 2x Leveraged",
         "VIXM": "VIX Mid-Term Futures",
         "TAIL": "Tail Risk Hedge",
-        "VQT": "Volatility Hedge",
         "SVXY": "Short VIX",
     },
     "🧮 Alternative": {
@@ -136,9 +140,7 @@ ETF_UNIVERSE = {
         "KMLM": "Managed Futures (KFA)",
         "FIG": "Global Macro",
         "GVAL": "Global Value",
-        "TCTL": "Tactical Allocation",
         "COM": "Commodity Trend",
-        "WDTI": "WisdomTree Trend",
     },
     "🧭 Sector": {
         "XLK": "Technology",
@@ -166,7 +168,6 @@ ETF_UNIVERSE = {
         "TMF": "Treasury 3x Bull",
         "TMV": "Treasury 3x Bear",
         "UGL": "Gold 2x Bull",
-        "DGLD": "Gold 2x Bear",
         "UCO": "Crude Oil 2x Bull",
         "SCO": "Crude Oil 2x Bear",
     }
@@ -210,10 +211,11 @@ st.markdown("""
         --text-muted: #6c757d;
     }
 
-    /* Reduce overall padding */
+    /* Reduce overall padding and allow dropdown overflow */
     .block-container {
         padding-top: 2rem !important;
         padding-bottom: 1.2rem !important;
+        overflow: visible !important;
     }
 
     /* Header styling */
@@ -307,13 +309,19 @@ st.markdown("""
         padding: 0.45rem 0.65rem !important;
     }
 
-    /* Selectbox - fix text overflow */
+    /* Selectbox - prevent dropdown clipping */
+    .stSelectbox {
+        overflow: visible !important;
+    }
+
     .stSelectbox > div > div {
         font-size: 0.88rem !important;
+        overflow: visible !important;
     }
 
     .stSelectbox div[data-baseweb="select"] {
         min-width: 100% !important;
+        overflow: visible !important;
     }
 
     .stSelectbox div[data-baseweb="select"] > div {
@@ -323,32 +331,30 @@ st.markdown("""
         min-height: 2.4rem !important;
     }
 
-    /* Dropdown menu items - ensure text wraps and is readable */
+    /* Ensure parent containers don't clip dropdown */
+    .element-container {
+        overflow: visible !important;
+    }
+
+    /* Dropdown menu - compact sizing */
     [data-baseweb="popover"] {
-        max-width: 500px !important;
-        width: auto !important;
-        max-height: 400px !important;
+        max-width: 280px !important;
+        max-height: 250px !important;
     }
 
     [role="option"] {
-        white-space: normal !important;
-        word-wrap: break-word !important;
-        min-height: 2.4rem !important;
-        padding: 0.5rem 1rem !important;
-        line-height: 1.4 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        padding: 0.35rem 0.7rem !important;
+        font-size: 0.85rem !important;
     }
 
     [role="listbox"] {
-        max-width: 500px !important;
-        max-height: 400px !important;
+        max-width: 280px !important;
+        max-height: 250px !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
-    }
-
-    /* Ensure scrollbar is always visible on dropdown menus */
-    [role="listbox"]::-webkit-scrollbar {
-        width: 10px !important;
-        display: block !important;
     }
 
     [role="listbox"]::-webkit-scrollbar-track {
@@ -773,10 +779,13 @@ def render_smart_etf_selector():
             st.rerun()
 
     with col3:
-        if st.button("Select All (Category)", use_container_width=True,
-                    disabled=(selection_mode != "Browse Categories")):
-            # Add all symbols from currently expanded category
-            st.info("Expand a category and select ETFs individually")
+        if st.button("Select All ETFs", use_container_width=True):
+            # Collect all ETFs from all categories
+            all_etfs = []
+            for category_etfs in ETF_UNIVERSE.values():
+                all_etfs.extend(category_etfs.keys())
+            st.session_state.selected_symbols = all_etfs
+            st.rerun()
 
     return st.session_state.selected_symbols
 
@@ -802,9 +811,6 @@ def render_configuration_sheet():
         with col3:
             st.caption("💰 **Capital**")
             initial_capital = st.number_input("Initial ($)", value=100000, min_value=1000, step=10000, format="%d")
-        with col4:
-            st.markdown("<p style='font-size: 0.8rem; color: transparent; margin-bottom: 0.3rem; margin-top: 0.4rem; line-height: 1.2;'>**.**</p>", unsafe_allow_html=True)
-            allow_short = st.checkbox("Short", value=True, help="Allow short selling")
 
         st.write("")  # Small spacer
 
@@ -834,7 +840,6 @@ def render_configuration_sheet():
                 'start_date': start_date,
                 'end_date': end_date,
                 'initial_capital': initial_capital,
-                'allow_short': allow_short,
                 'symbols': symbols,
                 'spread': spread / 100,  # Convert to decimal
                 'slippage_pct': slippage_pct / 100,
@@ -859,44 +864,188 @@ def render_strategy_sheet():
         st.error("No strategies found! Make sure strategies are properly defined in the strategies/ folder.")
         return
 
-    # Strategy selection - two-tier system to avoid dropdown overflow
-    # Group strategies by module
-    strategies_by_module = {}
-    for name, info in strategies.items():
-        module = info['module']
-        if module not in strategies_by_module:
-            strategies_by_module[module] = []
-        strategies_by_module[module].append(name)
+    # Strategy Selection Mode - NEW
+    st.caption("**Selection Mode**")
+    selection_mode = st.radio(
+        "Selection Mode",
+        ["Manual Selection", "Load from Saved Book"],
+        horizontal=True,
+        label_visibility="collapsed",
+        help="Choose to configure strategy manually or load from a saved book"
+    )
 
-    # Sort modules and put benchmark first
-    module_order = ['benchmark', 'momentum', 'aqr']
-    available_modules = [m for m in module_order if m in strategies_by_module]
+    st.write("")  # Spacer
 
-    # Step 1: Category selection using radio buttons
-    col1, col2 = st.columns([1, 3])
+    # Initialize variables
+    selected_strategy_name = None
+    selected_strategy = None
+    selected_module = None
+    strategy_params = {}
+    loaded_from_book = False
 
-    with col1:
+    # Load from Book Mode - NEW
+    if selection_mode == "Load from Saved Book":
+        from backt.utils.books import BookManager
+
+        # Use absolute path to saved_books in project root
+        books_dir = project_root / "saved_books"
+        manager = BookManager(books_dir=str(books_dir))
+        available_books = manager.list_books()
+
+        if not available_books:
+            st.info("📚 No saved books found. Run a backtest and save it as a book in the Results tab.")
+            st.caption("💡 Books allow you to save strategy configurations for reuse and portfolio construction.")
+            return
+
+        # Book selection
+        st.caption("**📚 Select Book**")
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            selected_book_name = st.selectbox(
+                "Select Book",
+                available_books,
+                label_visibility="collapsed",
+                help="Choose a saved book to load"
+            )
+
+        if selected_book_name:
+            try:
+                book = manager.load_book(selected_book_name)
+
+                # Display book info
+                st.caption("**Book Information:**")
+                info_col1, info_col2 = st.columns(2)
+
+                with info_col1:
+                    st.write(f"**Name:** {book.name}")
+                    st.write(f"**Strategy:** {book.strategy_module}.{book.strategy_name}")
+                    st.write(f"**Symbols:** {len(book.symbols)} symbols")
+
+                with info_col2:
+                    if book.description:
+                        st.write(f"**Description:** {book.description}")
+                    if book.tags:
+                        st.write(f"**Tags:** {', '.join(book.tags)}")
+                    st.write(f"**Created:** {book.created_at[:10]}")
+
+                # Show and edit symbols
+                with st.expander("📋 Book Symbols (Editable)", expanded=False):
+                    st.caption("Edit the symbol list below. Changes will be saved to the book.")
+
+                    # Create editable symbol list
+                    symbols_text = st.text_area(
+                        "Symbols (comma-separated)",
+                        value=", ".join(book.symbols),
+                        height=100,
+                        help="Add or remove symbols. Separate with commas.",
+                        key=f"book_symbols_{selected_book_name}"
+                    )
+
+                    # Parse edited symbols
+                    edited_symbols = [s.strip().upper() for s in symbols_text.split(',') if s.strip()]
+
+                    # Check if symbols changed
+                    symbols_changed = set(edited_symbols) != set(book.symbols)
+
+                    # Show comparison if changed
+                    if symbols_changed:
+                        st.write("")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.caption("**Original:**")
+                            st.write(f"{len(book.symbols)} symbols")
+                            st.code(", ".join(book.symbols), language=None)
+                        with col2:
+                            st.caption("**New:**")
+                            st.write(f"{len(edited_symbols)} symbols")
+                            st.code(", ".join(edited_symbols), language=None)
+
+                    # Update button (only enabled if changed)
+                    st.write("")
+                    update_col1, update_col2 = st.columns([1, 2])
+                    with update_col1:
+                        update_button = st.button(
+                            "💾 Update Book Symbols",
+                            disabled=not symbols_changed,
+                            type="primary" if symbols_changed else "secondary",
+                            use_container_width=True,
+                            key=f"update_book_symbols_{selected_book_name}"
+                        )
+
+                    if update_button and symbols_changed:
+                        try:
+                            # Update book with new symbols
+                            book.symbols = edited_symbols
+                            manager.save_book(book, overwrite=True)
+                            st.success(f"✅ Book '{book.name}' updated with {len(edited_symbols)} symbols!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to update book: {str(e)}")
+
+                # Load strategy from book
+                selected_strategy_name = book.strategy_name
+                selected_module = book.strategy_module.lower()
+
+                if selected_strategy_name in strategies:
+                    selected_strategy = strategies[selected_strategy_name]
+                    strategy_params = book.strategy_params.copy()
+                    loaded_from_book = True
+
+                    # Override config symbols with book symbols (use edited symbols if available)
+                    final_symbols = edited_symbols if 'symbols_text' in locals() else book.symbols
+                    st.session_state.config['symbols'] = final_symbols
+
+                    st.success(f"✅ Loaded book '{book.name}' with {len(final_symbols)} symbols!")
+                    st.caption("⚠️ **Note:** Dates are still from your Configuration tab. Symbols are now from the book.")
+                else:
+                    st.error(f"❌ Strategy '{selected_strategy_name}' not found. Make sure it exists in the strategies folder.")
+                    return
+
+            except Exception as e:
+                st.error(f"❌ Failed to load book: {str(e)}")
+                st.exception(e)
+                return
+
+    # Manual Selection Mode
+    else:
+        # Strategy selection - two-tier system to avoid dropdown overflow
+        # Group strategies by module
+        strategies_by_module = {}
+        for name, info in strategies.items():
+            module = info['module']
+            if module not in strategies_by_module:
+                strategies_by_module[module] = []
+            strategies_by_module[module].append(name)
+
+        # Sort modules and put benchmark first
+        module_order = ['benchmark', 'momentum', 'aqr']
+        available_modules = [m for m in module_order if m in strategies_by_module]
+
+        # Step 1: Category selection using radio buttons
         st.caption("**Category**")
         selected_module = st.radio(
             "Category",
             available_modules,
             format_func=lambda x: x.upper(),
+            horizontal=True,
             label_visibility="collapsed"
         )
 
-    with col2:
-        st.caption("**Strategy**")
         # Step 2: Strategy selection from chosen category
+        st.caption("**Strategy**")
         strategies_in_module = sorted(strategies_by_module[selected_module])
 
-        selected_strategy_name = st.selectbox(
-            "Strategy",
-            strategies_in_module,
-            label_visibility="collapsed",
-            help=f"Select a {selected_module} strategy"
-        )
+        # Use narrower column to constrain selectbox and dropdown
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            selected_strategy_name = st.selectbox(
+                "Strategy",
+                strategies_in_module,
+                label_visibility="collapsed",
+                help=f"Select a {selected_module} strategy"
+            )
 
-    selected_strategy = strategies[selected_strategy_name]
+        selected_strategy = strategies[selected_strategy_name]
 
     # Show strategy description inline
     st.caption(f"ℹ️ {selected_strategy['description']}")
@@ -909,16 +1058,22 @@ def render_strategy_sheet():
 
     # Extract and render parameters - compact
     st.write("")  # Small spacer
-    st.caption("**⚙️ Parameters**")
+    if loaded_from_book:
+        st.caption("**⚙️ Parameters (Loaded from Book - Editable)**")
+    else:
+        st.caption("**⚙️ Parameters**")
 
     strategy_func = selected_strategy['function']
     params_spec = extract_strategy_params(strategy_func)
 
     if not params_spec:
         st.info("No configurable parameters")
-        strategy_params = {}
+        if not loaded_from_book:
+            strategy_params = {}
     else:
-        strategy_params = {}
+        # If not loaded from book, initialize empty dict
+        if not loaded_from_book:
+            strategy_params = {}
 
         # Group parameters by type
         int_params = {k: v for k, v in params_spec.items() if v['type'] == 'int'}
@@ -932,22 +1087,31 @@ def render_strategy_sheet():
             cols = st.columns(4)  # 4-column grid
             for idx, (param_name, param_info) in enumerate(all_params):
                 with cols[idx % 4]:
+                    # Use book value if loaded, otherwise use default from param_info
+                    if loaded_from_book and param_name in strategy_params:
+                        default_value = strategy_params[param_name]
+                    else:
+                        default_value = param_info['default'] if param_info['default'] is not None else (20 if param_info['type'] == 'int' else 0.1 if param_info['type'] == 'float' else False)
+
                     if param_info['type'] == 'int':
                         strategy_params[param_name] = st.number_input(
                             param_name.replace('_', ' ').title(),
-                            value=param_info['default'] if param_info['default'] is not None else 20,
-                            min_value=1, step=1
+                            value=int(default_value),
+                            min_value=1, step=1,
+                            key=f"param_{param_name}_{'book' if loaded_from_book else 'manual'}"
                         )
                     elif param_info['type'] == 'float':
                         strategy_params[param_name] = st.number_input(
                             param_name.replace('_', ' ').title(),
-                            value=param_info['default'] if param_info['default'] is not None else 0.1,
-                            min_value=0.0, step=0.0001, format="%.4f"
+                            value=float(default_value),
+                            min_value=0.0, step=0.0001, format="%.4f",
+                            key=f"param_{param_name}_{'book' if loaded_from_book else 'manual'}"
                         )
                     elif param_info['type'] == 'bool':
                         strategy_params[param_name] = st.checkbox(
                             param_name.replace('_', ' ').title(),
-                            value=param_info['default'] if param_info['default'] is not None else False
+                            value=bool(default_value),
+                            key=f"param_{param_name}_{'book' if loaded_from_book else 'manual'}"
                         )
 
     # Run Backtest Button - compact
@@ -968,6 +1132,7 @@ def render_strategy_sheet():
         # Store strategy selection
         st.session_state.selected_strategy_name = selected_strategy_name
         st.session_state.selected_strategy_func = strategy_func
+        st.session_state.selected_strategy_module = selected_module.upper() if selected_module else 'UNKNOWN'
         st.session_state.strategy_params = strategy_params
 
         # Run the backtest
@@ -983,11 +1148,12 @@ def render_strategy_sheet():
                 )
 
                 # Create backtest config
+                # Note: allow_short is always True at config level; strategies control shorting via their own parameters
                 config = BacktestConfig(
                     start_date=config_data['start_date'].strftime('%Y-%m-%d'),
                     end_date=config_data['end_date'].strftime('%Y-%m-%d'),
                     initial_capital=config_data['initial_capital'],
-                    allow_short=config_data['allow_short'],
+                    allow_short=True,  # Always True - strategies control their own shorting behavior
                     execution=execution_config,
                     use_mock_data=config_data['use_mock_data'],
                     verbose=False
@@ -1747,17 +1913,19 @@ def render_results_sheet():
     st.caption("**📅 Monthly Heatmap Comparison**")
 
     # Metric selector - compact
-    selected_metric = st.selectbox(
-        "Metric",
-        options=['returns', 'sharpe_ratio', 'pnl', 'drawdown', 'volatility'],
-        format_func=lambda x: {
-            'returns': 'Returns (%)',
-            'sharpe_ratio': 'Sharpe Ratio',
-            'pnl': 'Profit/Loss ($)',
-            'drawdown': 'Drawdown (%)',
-            'volatility': 'Volatility (%)'
-        }[x],
-        key='heatmap_metric_selector',
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        selected_metric = st.selectbox(
+            "Metric",
+            options=['returns', 'sharpe_ratio', 'pnl', 'drawdown', 'volatility'],
+            format_func=lambda x: {
+                'returns': 'Returns (%)',
+                'sharpe_ratio': 'Sharpe Ratio',
+                'pnl': 'Profit/Loss ($)',
+                'drawdown': 'Drawdown (%)',
+                'volatility': 'Volatility (%)'
+            }[x],
+            key='heatmap_metric_selector',
         label_visibility="collapsed"
     )
 
@@ -1911,9 +2079,12 @@ def render_results_sheet():
             display_df = display_df[ordered_columns]
 
             # Show trades with pagination
-            rows_per_page = st.selectbox("Rows per page", [50, 100, 250, 500], index=1, key="trades_rows")
-            total_pages = (len(display_df) - 1) // rows_per_page + 1
-            page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key="trades_page")
+            col1, col2, col3 = st.columns([1, 1, 2])
+            with col1:
+                rows_per_page = st.selectbox("Rows per page", [50, 100, 250, 500], index=1, key="trades_rows")
+            with col2:
+                total_pages = (len(display_df) - 1) // rows_per_page + 1
+                page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key="trades_page")
 
             start_idx = (page - 1) * rows_per_page
             end_idx = start_idx + rows_per_page
@@ -1951,6 +2122,121 @@ def render_results_sheet():
             )
         else:
             st.info("No trades executed")
+
+    # Book Saving Section - Quick Save
+    st.write("")  # Small spacer
+    st.markdown("---")  # Divider
+    st.subheader("📚 Save as Book")
+
+    # Check if we have all required session state
+    if 'selected_strategy_name' not in st.session_state or 'strategy_params' not in st.session_state:
+        st.warning("Strategy information not available. Please run a backtest first.")
+    else:
+        # Quick save section - always visible
+        st.caption("Save this configuration for later reuse. You can load it in the Strategy tab.")
+
+        col1, col2 = st.columns([3, 1])
+
+        with col1:
+            # What will be saved info
+            st.caption(f"**Will save:** {st.session_state.selected_strategy_name} • {len(st.session_state.strategy_params)} params • {len(st.session_state.config['symbols'])} symbols")
+
+            # Name input
+            quick_book_name = st.text_input(
+                "Book Name",
+                placeholder="e.g., Momentum_Tech_LongOnly",
+                help="Enter a unique name for this book",
+                key="quick_book_name_input",
+                label_visibility="collapsed"
+            )
+
+        with col2:
+            st.write("")  # Spacing to align with input
+            st.write("")  # More spacing
+            save_button = st.button(
+                "💾 Save Book",
+                type="primary",
+                use_container_width=True,
+                key="quick_save_book_button"
+            )
+
+        # Advanced options (optional)
+        with st.expander("⚙️ Advanced Options (Description & Tags)", expanded=False):
+            adv_col1, adv_col2 = st.columns([2, 1])
+
+            with adv_col1:
+                book_description = st.text_area(
+                    "Description (optional)",
+                    placeholder="e.g., Fast momentum strategy for tech stocks during bull markets",
+                    help="Optional description of this book's purpose and characteristics",
+                    height=80,
+                    key="book_description_input"
+                )
+
+                book_tags = st.text_input(
+                    "Tags (optional, comma-separated)",
+                    placeholder="e.g., momentum, long-only, tech",
+                    help="Optional tags for categorization",
+                    key="book_tags_input"
+                )
+
+            with adv_col2:
+                st.caption("**What's included:**")
+                st.write(f"✓ Strategy: {st.session_state.selected_strategy_name}")
+                st.write(f"✓ Parameters: {len(st.session_state.strategy_params)}")
+                st.write(f"✓ Symbols: {len(st.session_state.config['symbols'])}")
+                st.write("")
+                st.caption("❌ **Not included:**")
+                st.write("• Date ranges")
+
+        # Handle save button click
+        if save_button:
+            if not quick_book_name:
+                st.error("⚠️ Please enter a book name.")
+            else:
+                try:
+                    from backt.utils.books import BookManager, create_book_from_session
+
+                    # Parse tags (from advanced options if expanded)
+                    tags_input = st.session_state.get('book_tags_input', '')
+                    tags_list = [tag.strip() for tag in tags_input.split(',')] if tags_input else []
+
+                    # Get description (from advanced options if expanded)
+                    description_input = st.session_state.get('book_description_input', '')
+
+                    # Get strategy module from strategy name
+                    strategy_module = st.session_state.get('selected_strategy_module', 'UNKNOWN')
+
+                    # Create book
+                    book = create_book_from_session(
+                        name=quick_book_name,
+                        strategy_module=strategy_module,
+                        strategy_name=st.session_state.selected_strategy_name,
+                        strategy_params=st.session_state.strategy_params,
+                        symbols=st.session_state.config['symbols'],
+                        description=description_input,
+                        tags=tags_list
+                    )
+
+                    # Save book
+                    books_dir = project_root / "saved_books"
+                    manager = BookManager(books_dir=str(books_dir))
+
+                    # Check if book already exists
+                    if manager.book_exists(quick_book_name):
+                        st.error(f"❌ Book '{quick_book_name}' already exists!")
+                        st.info("💡 Choose a different name or delete the existing book first.")
+                        st.caption(f"Existing book location: {manager.books_dir / f'{quick_book_name}.json'}")
+                    else:
+                        manager.save_book(book)
+                        st.success(f"✅ Book '{quick_book_name}' saved successfully!")
+                        st.info(f"📂 Saved to: {manager.books_dir / f'{quick_book_name}.json'}")
+                        st.caption("💡 Load this book in the Strategy tab under 'Load from Saved Book'")
+                        st.balloons()
+
+                except Exception as e:
+                    st.error(f"❌ Failed to save book: {str(e)}")
+                    st.exception(e)
 
 
 
@@ -2036,7 +2322,7 @@ def render_single_strategy_cpcv():
                 start_date=config_dict['start_date'].strftime('%Y-%m-%d'),
                 end_date=config_dict['end_date'].strftime('%Y-%m-%d'),
                 initial_capital=config_dict['initial_capital'],
-                allow_short=config_dict.get('allow_short', False),
+                allow_short=True,  # Always True - strategies control their own shorting behavior
                 use_mock_data=config_dict.get('use_mock_data', False),
                 execution=execution_config,
                 verbose=False
@@ -2559,7 +2845,7 @@ def render_parameter_optimization_cpcv():
                     start_date=config['start_date'],
                     end_date=config['end_date'],
                     initial_capital=config.get('initial_capital', 100000.0),
-                    allow_short=config.get('allow_short', False),
+                    allow_short=True,  # Always True - strategies control their own shorting behavior
                     execution=execution_config,
                     verbose=False  # Suppress backtest logs during optimization
                 )
@@ -2742,15 +3028,225 @@ def render_strategy_comparison_cpcv():
     st.write("• Identify which strategy is most robust")
 
 
+# ==== Book Manager Functions ====
+
+def render_book_manager_sheet():
+    """Sheet 5: Book Manager - Edit saved strategy configurations"""
+    from backt.utils import BookEditor, Book
+    import pandas as pd
+
+    st.subheader("📚 Book Manager")
+    st.caption("Manage your saved strategy configurations")
+
+    # Initialize session state for book manager
+    if 'bm_selected_book' not in st.session_state:
+        st.session_state.bm_selected_book = None
+    if 'bm_modified' not in st.session_state:
+        st.session_state.bm_modified = False
+    if 'bm_original' not in st.session_state:
+        st.session_state.bm_original = None
+
+    # Use absolute path to saved_books in project root
+    books_dir = project_root / "saved_books"
+    editor = BookEditor(books_dir=str(books_dir))
+    books = editor.manager.get_all_books()
+
+    if not books:
+        st.info("📚 No saved books found. Create books by saving backtest results or using the ranking tool.")
+        st.caption("💡 Books allow you to save strategy configurations for reuse")
+        return
+
+    # Book selection
+    col1, col2, col3 = st.columns([2, 2, 1])
+
+    with col1:
+        book_names = [b.name for b in books]
+        selected_name = st.selectbox(
+            "Select Book",
+            [""] + book_names,
+            key="bm_book_selector"
+        )
+
+    with col2:
+        # Filter options
+        all_strategies = sorted(list(set([b.strategy_name for b in books])))
+        filter_strategy = st.selectbox("Filter by Strategy", ["All"] + all_strategies, key="bm_filter_strategy")
+
+    with col3:
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.rerun()
+
+    if not selected_name:
+        # Show overview
+        st.divider()
+        st.caption(f"**{len(books)} books available**")
+
+        # Apply filter
+        display_books = books
+        if filter_strategy != "All":
+            display_books = [b for b in books if b.strategy_name == filter_strategy]
+
+        book_data = [{
+            "Name": b.name,
+            "Strategy": b.strategy_name,
+            "Symbols": len(b.symbols),
+            "Parameters": len(b.strategy_params),
+            "Tags": ", ".join(b.tags[:3]) if b.tags else "-",
+            "Updated": b.updated_at[:10]
+        } for b in display_books]
+        st.dataframe(pd.DataFrame(book_data), use_container_width=True, hide_index=True)
+        return
+
+    # Load book
+    if st.session_state.bm_selected_book is None or st.session_state.bm_selected_book.name != selected_name:
+        book = editor.load_book(selected_name)
+        st.session_state.bm_selected_book = book
+        st.session_state.bm_original = Book.from_dict(book.to_dict())
+        st.session_state.bm_modified = False
+
+    book = st.session_state.bm_selected_book
+    original = st.session_state.bm_original
+
+    # Status and controls
+    st.divider()
+
+    if st.session_state.bm_modified:
+        st.warning("⚠️ Unsaved changes")
+    else:
+        st.success("✅ No unsaved changes")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        if st.button("💾 Save", disabled=not st.session_state.bm_modified, type="primary", use_container_width=True):
+            editor.save_book(book, create_backup=True)
+            st.session_state.bm_modified = False
+            st.session_state.bm_original = Book.from_dict(book.to_dict())
+            st.success(f"Saved '{book.name}' (backup created)")
+            st.rerun()
+
+    with col2:
+        if st.button("↩️ Revert", disabled=not st.session_state.bm_modified, use_container_width=True):
+            st.session_state.bm_selected_book = Book.from_dict(original.to_dict())
+            st.session_state.bm_modified = False
+            st.rerun()
+
+    with col3:
+        if st.button("🔍 Validate", use_container_width=True):
+            is_valid, warnings = editor.validate_book(book)
+            if is_valid:
+                st.success("✅ Valid")
+            else:
+                for w in warnings:
+                    st.warning(f"⚠️ {w}")
+
+    with col4:
+        if st.button("🗑️ Delete", use_container_width=True, type="secondary"):
+            st.session_state.show_delete = True
+
+    if st.session_state.get('show_delete', False):
+        st.error(f"⚠️ Delete '{book.name}'?")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✅ Confirm", type="primary", use_container_width=True):
+                editor.manager.delete_book(book.name)
+                st.session_state.bm_selected_book = None
+                st.session_state.show_delete = False
+                st.rerun()
+        with c2:
+            if st.button("❌ Cancel", use_container_width=True):
+                st.session_state.show_delete = False
+                st.rerun()
+
+    # Tabs for editing
+    st.divider()
+    tab1, tab2, tab3 = st.tabs(["📋 Symbols", "⚙️ Parameters", "📝 Metadata"])
+
+    with tab1:
+        st.caption("**Edit Symbols**")
+        symbols_text = st.text_area(
+            "Symbol List (comma-separated)",
+            value=", ".join(book.symbols),
+            height=150,
+            key="bm_symbols"
+        )
+        new_symbols = sorted(list(set([s.strip().upper() for s in symbols_text.split(',') if s.strip()])))
+
+        if set(new_symbols) != set(book.symbols):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.caption(f"**Current:** {len(book.symbols)} symbols")
+            with col2:
+                st.caption(f"**New:** {len(new_symbols)} symbols")
+
+            added = set(new_symbols) - set(book.symbols)
+            removed = set(book.symbols) - set(new_symbols)
+            if added:
+                st.success(f"➕ {', '.join(sorted(added))}")
+            if removed:
+                st.error(f"➖ {', '.join(sorted(removed))}")
+
+            if st.button("✅ Apply Symbol Changes", type="primary"):
+                book.symbols = new_symbols
+                st.session_state.bm_modified = True
+                st.rerun()
+
+    with tab2:
+        st.caption("**Edit Parameters**")
+        with st.form("bm_params"):
+            updated_params = {}
+            for key, value in sorted(book.strategy_params.items()):
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    st.text(key)
+                with col2:
+                    if isinstance(value, bool):
+                        updated_params[key] = st.checkbox("", value=value, key=f"bm_p_{key}", label_visibility="collapsed")
+                    elif isinstance(value, int):
+                        updated_params[key] = st.number_input("", value=value, step=1, key=f"bm_p_{key}", label_visibility="collapsed")
+                    elif isinstance(value, float):
+                        updated_params[key] = st.number_input("", value=value, step=0.01, format="%.4f", key=f"bm_p_{key}", label_visibility="collapsed")
+                    else:
+                        updated_params[key] = st.text_input("", value=str(value), key=f"bm_p_{key}", label_visibility="collapsed")
+
+            if st.form_submit_button("💾 Apply Parameter Changes", type="primary"):
+                book.strategy_params = updated_params
+                st.session_state.bm_modified = True
+                st.rerun()
+
+    with tab3:
+        st.caption("**Edit Metadata**")
+        new_desc = st.text_area("Description", value=book.description, height=100, key="bm_desc")
+        if new_desc != book.description:
+            if st.button("💾 Update Description"):
+                book.description = new_desc
+                st.session_state.bm_modified = True
+                st.rerun()
+
+        st.caption("**Tags (comma-separated)**")
+        tags_text = st.text_input("", value=", ".join(book.tags), key="bm_tags", label_visibility="collapsed")
+        new_tags = [t.strip() for t in tags_text.split(',') if t.strip()]
+        if set(new_tags) != set(book.tags):
+            if st.button("💾 Update Tags"):
+                book.tags = new_tags
+                st.session_state.bm_modified = True
+                st.rerun()
+
+        st.divider()
+        st.caption(f"**Created:** {book.created_at[:19]}")
+        st.caption(f"**Updated:** {book.updated_at[:19]}")
+
+
 def main():
     """Main application"""
 
     # Create tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "⚙️ Configuration",
         "📈 Strategy",
         "📊 Results",
-        "🔬 CPCV Validation"
+        "🔬 CPCV Validation",
+        "📚 Book Manager"
     ])
 
     with tab1:
@@ -2764,6 +3260,9 @@ def main():
 
     with tab4:
         render_cpcv_validation_sheet()
+
+    with tab5:
+        render_book_manager_sheet()
 
     # Sidebar - Status - compact
     with st.sidebar:

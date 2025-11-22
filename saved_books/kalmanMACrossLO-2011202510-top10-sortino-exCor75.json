@@ -1,0 +1,43 @@
+{
+  "name": "kalmanMACrossLO-2011202510-top10-sortino-exCor75",
+  "strategy_module": "MOMENTUM",
+  "strategy_name": "kalman_ma_crossover_long_only",
+  "strategy_params": {
+    "Q_fast": 0.014,
+    "Q_slow": 0.0006,
+    "R": 1.0,
+    "min_periods": 60,
+    "initial_capital": 100000
+  },
+  "symbols": [
+    "NTSX",
+    "SPXL",
+    "VGT",
+    "VBK",
+    "XLF",
+    "SPLV",
+    "XLI",
+    "MTUM",
+    "QUAL",
+    "IAU"
+  ],
+  "description": "Top 10 symbols ranked by Sortino ratio using kalman_ma_crossover_long_only strategy. Ranked on 2025-11-09 21:46:43 using data from 2011-01-01 to 2025-11-06. Average Sortino: 0.283, Average Return: 217.59%",
+  "created_at": "2025-11-09T21:46:43.255645",
+  "updated_at": "2025-11-09T21:46:43.255645",
+  "tags": [
+    "ranked",
+    "kalman_ma_crossover_long_only",
+    "top_10"
+  ],
+  "metadata": {
+    "ranking_date": "2025-11-09 21:46:43",
+    "ranking_period": "2011-01-01 to 2025-11-06",
+    "ranking_metric": "sortino_ratio",
+    "num_symbols": 10,
+    "avg_sortino": 0.28347543156043437,
+    "avg_sharpe": 0.26540738792820984,
+    "avg_return": 2.175869786125266,
+    "top_symbol": "NTSX",
+    "top_sortino": 0.5002128682915944
+  }
+}

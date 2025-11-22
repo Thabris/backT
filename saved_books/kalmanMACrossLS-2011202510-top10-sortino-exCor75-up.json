@@ -1,0 +1,43 @@
+{
+  "name": "kalmanMACrossLS-2011202510-top10-sortino-exCor75-up",
+  "strategy_module": "MOMENTUM",
+  "strategy_name": "kalman_ma_crossover_long_short",
+  "strategy_params": {
+    "Q_fast": 0.01,
+    "Q_slow": 0.001,
+    "R": 1.0,
+    "min_periods": 60,
+    "initial_capital": 100000
+  },
+  "symbols": [
+    "DBMF",
+    "GVAL",
+    "GSG",
+    "VB",
+    "BND",
+    "SPHQ",
+    "USDU",
+    "IAU",
+    "DBB",
+    "USO"
+  ],
+  "description": "Top 10 symbols ranked by Sortino ratio using kalman_ma_crossover_long_short strategy. Ranked on 2025-11-09 22:14:46 using data from 2011-01-01 to 2025-11-06. Average Sortino: 0.308, Average Return: 121.31%",
+  "created_at": "2025-11-09T22:14:46.711607",
+  "updated_at": "2025-11-09T22:14:46.711607",
+  "tags": [
+    "ranked",
+    "kalman_ma_crossover_long_short",
+    "top_10"
+  ],
+  "metadata": {
+    "ranking_date": "2025-11-09 22:14:46",
+    "ranking_period": "2011-01-01 to 2025-11-06",
+    "ranking_metric": "sortino_ratio",
+    "num_symbols": 10,
+    "avg_sortino": 0.30784410835989123,
+    "avg_sharpe": 0.21676620993340326,
+    "avg_return": 1.2131159750582137,
+    "top_symbol": "DBMF",
+    "top_sortino": 0.38239595551640615
+  }
+}

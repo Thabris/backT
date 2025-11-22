@@ -1,0 +1,43 @@
+{
+  "name": "Kalman_Top10_2Yrs",
+  "strategy_module": "MOMENTUM",
+  "strategy_name": "kalman_ma_crossover_long_only",
+  "strategy_params": {
+    "Q_fast": 0.014,
+    "Q_slow": 0.0006,
+    "R": 1.0,
+    "min_periods": 60,
+    "initial_capital": 100000
+  },
+  "symbols": [
+    "SPHQ",
+    "LRGF",
+    "XLF",
+    "VOO",
+    "SPY",
+    "IVV",
+    "VFH",
+    "NTSX",
+    "SPXL",
+    "XLI"
+  ],
+  "description": "Top 10 symbols ranked by Sortino ratio using kalman_ma_crossover_long_only strategy. Ranked on 2025-11-09 15:58:04 using data from 2023-01-01 to 2024-12-31. Average Sortino: 0.828, Average Return: 41.65%",
+  "created_at": "2025-11-09T15:58:04.432970",
+  "updated_at": "2025-11-09T15:58:04.433275",
+  "tags": [
+    "ranked",
+    "kalman_ma_crossover_long_only",
+    "top_10"
+  ],
+  "metadata": {
+    "ranking_date": "2025-11-09 15:58:04",
+    "ranking_period": "2023-01-01 to 2024-12-31",
+    "ranking_metric": "sortino_ratio",
+    "num_symbols": 10,
+    "avg_sortino": 0.8277355794600535,
+    "avg_sharpe": 0.6362162690352688,
+    "avg_return": 0.41654714534513293,
+    "top_symbol": "SPHQ",
+    "top_sortino": 0.9249758365912798
+  }
+}

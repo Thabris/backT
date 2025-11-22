@@ -1,0 +1,36 @@
+{
+  "name": "bollingMRev-2011202510-top10-sortino-exCor75-up",
+  "strategy_module": "MOMENTUM",
+  "strategy_name": "bollinger_mean_reversion",
+  "strategy_params": {
+    "bb_period": 20,
+    "bb_std": 2.0,
+    "min_periods": 30,
+    "initial_capital": 100000
+  },
+  "symbols": [
+    "SQQQ",
+    "UVXY",
+    "SPXS",
+    "EWJ"
+  ],
+  "description": "Top 4 symbols ranked by Sortino ratio using bollinger_mean_reversion strategy. Ranked on 2025-11-09 18:52:54 using data from 2011-01-01 to 2025-11-06. Average Sortino: 0.142, Average Return: 63.37%",
+  "created_at": "2025-11-09T18:52:54.279049",
+  "updated_at": "2025-11-09T18:52:54.279049",
+  "tags": [
+    "ranked",
+    "bollinger_mean_reversion",
+    "top_4"
+  ],
+  "metadata": {
+    "ranking_date": "2025-11-09 18:52:54",
+    "ranking_period": "2011-01-01 to 2025-11-06",
+    "ranking_metric": "sortino_ratio",
+    "num_symbols": 4,
+    "avg_sortino": 0.14234577669677803,
+    "avg_sharpe": 0.128205200996238,
+    "avg_return": 0.6336544726524758,
+    "top_symbol": "SQQQ",
+    "top_sortino": 0.20933686412157212
+  }
+}

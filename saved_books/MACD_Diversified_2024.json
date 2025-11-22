@@ -1,0 +1,40 @@
+{
+  "name": "MACD_Diversified_2024",
+  "strategy_module": "MOMENTUM",
+  "strategy_name": "macd_crossover",
+  "strategy_params": {
+    "fast_period": 11,
+    "slow_period": 20,
+    "signal_period": 10,
+    "allow_short": false,
+    "min_periods": 35,
+    "initial_capital": 100000
+  },
+  "symbols": [
+    "VCR",
+    "DBA",
+    "VFH",
+    "XLU",
+    "IVV",
+    "FXI"
+  ],
+  "description": "Top 6 symbols ranked by Sortino ratio using macd_crossover strategy. Ranked on 2025-11-09 16:59:51 using data from 2024-01-01 to 2024-12-31. Average Sortino: 0.846, Average Return: 19.61%",
+  "created_at": "2025-11-09T16:59:51.398903",
+  "updated_at": "2025-11-09T16:59:51.399292",
+  "tags": [
+    "ranked",
+    "macd_crossover",
+    "top_6"
+  ],
+  "metadata": {
+    "ranking_date": "2025-11-09 16:59:51",
+    "ranking_period": "2024-01-01 to 2024-12-31",
+    "ranking_metric": "sortino_ratio",
+    "num_symbols": 6,
+    "avg_sortino": 0.8464106007483947,
+    "avg_sharpe": 0.7878207076983101,
+    "avg_return": 0.19608183645669972,
+    "top_symbol": "VCR",
+    "top_sortino": 1.0925528088821317
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "macd-2011202510-top10-sortino-diversified-10",
+  "strategy_module": "MOMENTUM",
+  "strategy_name": "macd_crossover",
+  "strategy_params": {
+    "fast_period": 11,
+    "slow_period": 20,
+    "signal_period": 10,
+    "allow_short": false,
+    "min_periods": 35,
+    "initial_capital": 100000
+  },
+  "symbols": [
+    "QUAL",
+    "VGT",
+    "XLY",
+    "SVXY",
+    "VHT",
+    "VFH",
+    "XLU",
+    "VLUE",
+    "XLRE",
+    "XLI"
+  ],
+  "description": "Top 10 symbols ranked by Sortino ratio using macd_crossover strategy. Ranked on 2025-11-09 17:46:38 using data from 2011-01-01 to 2025-11-06. Average Sortino: 0.491, Average Return: 1061.39%",
+  "created_at": "2025-11-09T17:46:38.402808",
+  "updated_at": "2025-11-09T17:46:38.402808",
+  "tags": [
+    "ranked",
+    "macd_crossover",
+    "top_10"
+  ],
+  "metadata": {
+    "ranking_date": "2025-11-09 17:46:38",
+    "ranking_period": "2011-01-01 to 2025-11-06",
+    "ranking_metric": "sortino_ratio",
+    "num_symbols": 10,
+    "avg_sortino": 0.4909058024097888,
+    "avg_sharpe": 0.4879426780245525,
+    "avg_return": 10.613923896891098,
+    "top_symbol": "QUAL",
+    "top_sortino": 0.553049515957074
+  }
+}

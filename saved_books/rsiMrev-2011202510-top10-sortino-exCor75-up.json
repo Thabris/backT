@@ -1,0 +1,43 @@
+{
+  "name": "rsiMrev-2011202510-top10-sortino-exCor75-up",
+  "strategy_module": "MOMENTUM",
+  "strategy_name": "rsi_mean_reversion",
+  "strategy_params": {
+    "rsi_period": 14,
+    "oversold_threshold": 30,
+    "overbought_threshold": 70,
+    "min_periods": 30,
+    "initial_capital": 100000
+  },
+  "symbols": [
+    "QUAL",
+    "XLU",
+    "IJR",
+    "XLRE",
+    "IEV",
+    "EWJ",
+    "EEM",
+    "XLE",
+    "TIP",
+    "UUP"
+  ],
+  "description": "Top 10 symbols ranked by Sortino ratio using rsi_mean_reversion strategy. Ranked on 2025-11-15 22:52:23 using data from 2011-01-01 to 2025-11-06. Average Sortino: 0.102, Average Return: 51.40%",
+  "created_at": "2025-11-15T22:52:23.618821",
+  "updated_at": "2025-11-15T22:52:23.618821",
+  "tags": [
+    "ranked",
+    "rsi_mean_reversion",
+    "top_10"
+  ],
+  "metadata": {
+    "ranking_date": "2025-11-15 22:52:23",
+    "ranking_period": "2011-01-01 to 2025-11-06",
+    "ranking_metric": "sortino_ratio",
+    "num_symbols": 10,
+    "avg_sortino": 0.10246821706028944,
+    "avg_sharpe": 0.1258036515212565,
+    "avg_return": 0.5139739093855938,
+    "top_symbol": "QUAL",
+    "top_sortino": 0.20680872401205158
+  }
+}

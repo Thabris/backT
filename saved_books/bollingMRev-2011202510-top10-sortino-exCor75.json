@@ -1,0 +1,40 @@
+{
+  "name": "bollingMRev-2011202510-top10-sortino-exCor75",
+  "strategy_module": "MOMENTUM",
+  "strategy_name": "bollinger_mean_reversion",
+  "strategy_params": {
+    "bb_period": 20,
+    "bb_std": 2.0,
+    "min_periods": 30,
+    "initial_capital": 100000
+  },
+  "symbols": [
+    "SPXL",
+    "EWJ",
+    "SCO",
+    "VWO",
+    "XLV",
+    "SVXY",
+    "VGK",
+    "USMV"
+  ],
+  "description": "Top 8 symbols ranked by Sortino ratio using bollinger_mean_reversion strategy. Ranked on 2025-11-09 18:13:36 using data from 2011-01-01 to 2025-11-06. Average Sortino: 0.019, Average Return: -15.43%",
+  "created_at": "2025-11-09T18:13:36.067505",
+  "updated_at": "2025-11-09T18:13:36.067505",
+  "tags": [
+    "ranked",
+    "bollinger_mean_reversion",
+    "top_8"
+  ],
+  "metadata": {
+    "ranking_date": "2025-11-09 18:13:36",
+    "ranking_period": "2011-01-01 to 2025-11-06",
+    "ranking_metric": "sortino_ratio",
+    "num_symbols": 8,
+    "avg_sortino": 0.018931740680892796,
+    "avg_sharpe": 0.030743258507052826,
+    "avg_return": -0.15434418992859913,
+    "top_symbol": "SPXL",
+    "top_sortino": 0.06610183393572988
+  }
+}

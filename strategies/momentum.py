@@ -232,6 +232,16 @@ def ma_crossover_long_short(
     orders = {}
     signals = {}
 
+    # Calculate target weight ONCE (stored in context for consistency)
+    if 'target_weights' not in context:
+        # Calculate equal 1/N weight for each symbol
+        n_symbols = len(market_data.keys())
+        if n_symbols > 0:
+            weight_per_symbol = 1.0 / n_symbols
+            context['target_weights'] = {symbol: weight_per_symbol for symbol in market_data.keys()}
+        else:
+            context['target_weights'] = {}
+
     # Analyze each asset
     for symbol, data in market_data.items():
         if len(data) < min_periods:
@@ -255,57 +265,49 @@ def ma_crossover_long_short(
             golden_cross = (prev_fast <= prev_slow) and (current_fast > current_slow)
             death_cross = (prev_fast >= prev_slow) and (current_fast < current_slow)
 
-            # Generate signals - KEY DIFFERENCE: SHORT on death cross
-            if golden_cross:
-                signals[symbol] = 'BUY'
-            elif death_cross:
-                signals[symbol] = 'SELL_SHORT'
-                short_positions.append(symbol)
-            elif current_fast > current_slow:
-                signals[symbol] = 'HOLD_LONG'
+            # Check current position
+            if symbol in positions and positions[symbol] is not None:
+                current_qty = positions[symbol].qty
             else:
+                current_qty = 0.0
+
+            is_long = current_qty > 1e-8
+            is_short = current_qty < -1e-8
+            is_flat = abs(current_qty) <= 1e-8
+
+            # Generate signals - ABSOLUTE: only trade on crossovers, not on holds
+            if golden_cross:
+                # BUY signal - enter or flip to long
+                signals[symbol] = 'BUY'
+                if is_short or is_flat:
+                    # Enter long (close short first if needed happens automatically)
+                    orders[symbol] = {
+                        'action': 'target_weight',
+                        'weight': context['target_weights'].get(symbol, 0)
+                    }
+            elif death_cross:
+                # SHORT signal - enter or flip to short
+                signals[symbol] = 'SELL_SHORT'
+                if is_long or is_flat:
+                    # Enter short (close long first if needed happens automatically)
+                    orders[symbol] = {
+                        'action': 'target_weight',
+                        'weight': -context['target_weights'].get(symbol, 0)
+                    }
+            elif current_fast > current_slow:
+                # Bullish trend - hold if long, no action
+                signals[symbol] = 'HOLD_LONG'
+                # NO ORDER - let position drift
+            else:
+                # Bearish trend - hold if short, no action
                 signals[symbol] = 'HOLD_SHORT'
-                short_positions.append(symbol)
+                # NO ORDER - let position drift
 
         except Exception as e:
             continue
 
-    # Calculate position sizing
-    total_positions = len(long_positions) + len(short_positions)
-
-    if total_positions > 0:
-        # Equal weight allocation (1/N)
-        weight_per_position = 1.0 / total_positions
-
-        # Create LONG orders
-        for symbol in long_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': weight_per_position  # Positive weight = LONG
-            }
-
-        # Create SHORT orders
-        for symbol in short_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': -weight_per_position  # Negative weight = SHORT
-            }
-
-    # Close positions for assets with no signal
-    for symbol in market_data.keys():
-        if symbol not in (long_positions + short_positions):
-            if symbol in positions and hasattr(positions[symbol], 'qty'):
-                if positions[symbol].qty != 0:
-                    orders[symbol] = {'action': 'close'}
-
     # Store strategy state for analysis
     context['signals'] = signals
-    context['long_positions'] = long_positions
-    context['short_positions'] = short_positions
-    context['num_long'] = len(long_positions)
-    context['num_short'] = len(short_positions)
-    context['total_positions'] = total_positions
-    context['position_weight'] = weight_per_position if total_positions > 0 else 0
 
     return orders
 
@@ -506,6 +508,16 @@ def kalman_ma_crossover_long_short(
     orders = {}
     signals = {}
 
+    # Calculate target weight ONCE (stored in context for consistency)
+    if 'target_weights' not in context:
+        # Calculate equal 1/N weight for each symbol
+        n_symbols = len(market_data.keys())
+        if n_symbols > 0:
+            weight_per_symbol = 1.0 / n_symbols
+            context['target_weights'] = {symbol: weight_per_symbol for symbol in market_data.keys()}
+        else:
+            context['target_weights'] = {}
+
     # Analyze each asset
     for symbol, data in market_data.items():
         if len(data) < min_periods:
@@ -532,57 +544,49 @@ def kalman_ma_crossover_long_short(
             golden_cross = (prev_fast <= prev_slow) and (current_fast > current_slow)
             death_cross = (prev_fast >= prev_slow) and (current_fast < current_slow)
 
-            # Generate signals - SHORT on death cross, LONG on golden cross
-            if golden_cross:
-                signals[symbol] = 'BUY'
-            elif death_cross:
-                signals[symbol] = 'SELL_SHORT'
-                short_positions.append(symbol)
-            elif current_fast > current_slow:
-                signals[symbol] = 'HOLD_LONG'
+            # Check current position
+            if symbol in positions and positions[symbol] is not None:
+                current_qty = positions[symbol].qty
             else:
+                current_qty = 0.0
+
+            is_long = current_qty > 1e-8
+            is_short = current_qty < -1e-8
+            is_flat = abs(current_qty) <= 1e-8
+
+            # Generate signals - ABSOLUTE: only trade on crossovers, not on holds
+            if golden_cross:
+                # BUY signal - enter or flip to long
+                signals[symbol] = 'BUY'
+                if is_short or is_flat:
+                    # Enter long (close short first if needed happens automatically)
+                    orders[symbol] = {
+                        'action': 'target_weight',
+                        'weight': context['target_weights'].get(symbol, 0)
+                    }
+            elif death_cross:
+                # SHORT signal - enter or flip to short
+                signals[symbol] = 'SELL_SHORT'
+                if is_long or is_flat:
+                    # Enter short (close long first if needed happens automatically)
+                    orders[symbol] = {
+                        'action': 'target_weight',
+                        'weight': -context['target_weights'].get(symbol, 0)
+                    }
+            elif current_fast > current_slow:
+                # Bullish trend - hold if long, no action
+                signals[symbol] = 'HOLD_LONG'
+                # NO ORDER - let position drift
+            else:
+                # Bearish trend - hold if short, no action
                 signals[symbol] = 'HOLD_SHORT'
-                short_positions.append(symbol)
+                # NO ORDER - let position drift
 
         except Exception as e:
             continue
 
-    # Calculate position sizing
-    total_positions = len(long_positions) + len(short_positions)
-
-    if total_positions > 0:
-        # Equal weight allocation (1/N)
-        weight_per_position = 1.0 / total_positions
-
-        # Create LONG orders
-        for symbol in long_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': weight_per_position  # Positive weight = LONG
-            }
-
-        # Create SHORT orders
-        for symbol in short_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': -weight_per_position  # Negative weight = SHORT
-            }
-
-    # Close positions for assets with no signal
-    for symbol in market_data.keys():
-        if symbol not in (long_positions + short_positions):
-            if symbol in positions and hasattr(positions[symbol], 'qty'):
-                if positions[symbol].qty != 0:
-                    orders[symbol] = {'action': 'close'}
-
     # Store strategy state for analysis
     context['signals'] = signals
-    context['long_positions'] = long_positions
-    context['short_positions'] = short_positions
-    context['num_long'] = len(long_positions)
-    context['num_short'] = len(short_positions)
-    context['total_positions'] = total_positions
-    context['position_weight'] = weight_per_position if total_positions > 0 else 0
 
     return orders
 # New strategies to add to momentum.py
@@ -596,11 +600,12 @@ def rsi_mean_reversion(
     params: Dict[str, Any]
 ) -> Dict[str, Dict]:
     """
-    RSI Mean Reversion Strategy
+    RSI Mean Reversion Strategy (Long-Short)
 
     Logic:
-    - BUY when RSI < oversold_threshold (asset is oversold)
-    - SELL when RSI > overbought_threshold (asset is overbought)
+    - LONG when RSI < oversold_threshold (asset is oversold, expecting bounce up)
+    - SHORT when RSI > overbought_threshold (asset is overbought, expecting pullback down)
+    - Exit when RSI returns to neutral zone (between oversold and overbought)
     - Each symbol gets equal allocation (1/N) of portfolio value
 
     Parameters:
@@ -637,6 +642,7 @@ def rsi_mean_reversion(
     orders = {}
     signals = {}
     long_positions = []
+    short_positions = []
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -653,42 +659,66 @@ def rsi_mean_reversion(
             current_rsi = rsi.iloc[-1]
 
             # Check current position
-            has_position = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty > 0
+            has_position = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty != 0
+            if has_position:
+                position_qty = positions[symbol].qty
+                is_long = position_qty > 0
+                is_short = position_qty < 0
+            else:
+                is_long = False
+                is_short = False
 
-            # Signal-based trading: Only enter on oversold, exit on overbought
+            # Neutral zone for exits
+            neutral_zone = oversold < current_rsi < overbought
+
+            # Signal-based trading: Long on oversold, Short on overbought
             if current_rsi < oversold and not has_position:
-                # Enter position when oversold (only if not already holding)
+                # Enter LONG when oversold (expecting bounce up)
                 signals[symbol] = 'OVERSOLD_BUY'
                 long_positions.append(symbol)
-            elif current_rsi > overbought and has_position:
-                # Exit position when overbought
-                signals[symbol] = 'OVERBOUGHT_SELL'
-                # Don't add to long_positions - will be closed
+            elif current_rsi > overbought and not has_position:
+                # Enter SHORT when overbought (expecting pullback down)
+                signals[symbol] = 'OVERBOUGHT_SHORT'
+                short_positions.append(symbol)
+            elif neutral_zone and has_position:
+                # Exit position when RSI returns to neutral zone (mean reversion complete)
+                signals[symbol] = 'NEUTRAL_EXIT'
+                # Don't add to positions - will be closed
             elif has_position:
-                # Hold position until overbought - include in rebalancing
-                signals[symbol] = 'HOLD'
-                long_positions.append(symbol)  # Include for multi-symbol rebalancing
+                # Hold position - include in rebalancing
+                if is_long:
+                    signals[symbol] = 'HOLD_LONG'
+                    long_positions.append(symbol)
+                elif is_short:
+                    signals[symbol] = 'HOLD_SHORT'
+                    short_positions.append(symbol)
             else:
                 signals[symbol] = 'NEUTRAL'
 
         except Exception as e:
             continue
 
-    # Calculate position sizing
-    total_positions = len(long_positions)
+    # Position sizing for independent execution mode
+    # Each symbol uses 100% of its allocated capital
+    # Issue orders for all positions (new and held) with weight = 1.0
 
-    if total_positions > 0:
-        weight_per_position = 1.0 / total_positions
+    # Assign positive weights to long positions
+    for symbol in long_positions:
+        orders[symbol] = {
+            'action': 'target_weight',
+            'weight': 1.0  # 100% of symbol's allocated capital
+        }
 
-        for symbol in long_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': weight_per_position
-            }
+    # Assign negative weights to short positions
+    for symbol in short_positions:
+        orders[symbol] = {
+            'action': 'target_weight',
+            'weight': -1.0  # 100% of symbol's allocated capital (short)
+        }
 
-    # Close positions on overbought (explicit SELL signal)
+    # Close positions when RSI returns to neutral zone
     for symbol, signal in signals.items():
-        if signal == 'OVERBOUGHT_SELL':
+        if signal in ['NEUTRAL_EXIT', 'OVERBOUGHT_SELL']:
             if symbol in positions and hasattr(positions[symbol], 'qty'):
                 if positions[symbol].qty != 0:
                     orders[symbol] = {'action': 'close'}
@@ -696,7 +726,193 @@ def rsi_mean_reversion(
     # Store strategy state
     context['signals'] = signals
     context['long_positions'] = long_positions
-    context['total_positions'] = total_positions
+    context['short_positions'] = short_positions
+    context['total_positions'] = len(long_positions) + len(short_positions)
+
+    return orders
+
+
+def rsi_momentum(
+    market_data: Dict[str, pd.DataFrame],
+    current_time: pd.Timestamp,
+    positions: Dict[str, Any],
+    context: Dict[str, Any],
+    params: Dict[str, Any]
+) -> Dict[str, Dict]:
+    """
+    RSI Momentum/Trend-Following Strategy (Long-Short)
+
+    Logic:
+    - BUY when RSI > buy_threshold (strong momentum, expect continuation up)
+    - SHORT when RSI < sell_threshold (weak momentum, expect continuation down)
+    - EXIT LONG when RSI falls below buy_tp (momentum fading, take profit)
+    - EXIT SHORT when RSI rises above sell_tp (downward momentum fading, cover)
+
+    This is the OPPOSITE of mean reversion - it bets on trend continuation.
+
+    Parameters:
+    -----------
+    rsi_period : int, default=14
+        RSI calculation period
+    buy_threshold : float, default=60
+        RSI level to enter long (strong momentum)
+    sell_threshold : float, default=40
+        RSI level to enter short (weak momentum)
+    buy_tp : float, default=50
+        RSI level to exit long (take profit when momentum fades)
+    sell_tp : float, default=50
+        RSI level to exit short (cover when downward momentum fades)
+    min_periods : int, default=30
+        Minimum data points required
+
+    Returns:
+    --------
+    Dict[str, Dict]
+        Dictionary of orders keyed by symbol
+
+    Example:
+    --------
+    >>> params = {
+    ...     'rsi_period': 14,
+    ...     'buy_threshold': 60,
+    ...     'sell_threshold': 40,
+    ...     'buy_tp': 50,
+    ...     'sell_tp': 50
+    ... }
+    >>> result = backtester.run(
+    ...     strategy=rsi_momentum,
+    ...     universe=['SPY', 'QQQ', 'TLT'],
+    ...     strategy_params=params
+    ... )
+    """
+    # Strategy parameters
+    rsi_period = params.get('rsi_period', 14)
+    buy_threshold = params.get('buy_threshold', 60)
+    sell_threshold = params.get('sell_threshold', 40)
+    buy_tp = params.get('buy_tp', 50)
+    sell_tp = params.get('sell_tp', 50)
+    min_periods = params.get('min_periods', 30)
+
+    orders = {}
+    signals = {}
+    long_positions = []
+    short_positions = []
+
+    # Analyze each asset
+    for symbol, data in market_data.items():
+        if len(data) < min_periods:
+            continue
+
+        try:
+            # Calculate RSI
+            rsi = TechnicalIndicators.rsi(data['close'], rsi_period)
+
+            if len(rsi) < 2:
+                continue
+
+            current_rsi = rsi.iloc[-1]
+
+            # Check current position
+            has_position = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty != 0
+            if has_position:
+                position_qty = positions[symbol].qty
+                is_long = position_qty > 0
+                is_short = position_qty < 0
+            else:
+                is_long = False
+                is_short = False
+
+            # Momentum-based trading: Enter on strength, exit when momentum fades
+            if current_rsi > buy_threshold and not has_position:
+                # Enter LONG when RSI shows strong momentum (expect continuation)
+                signals[symbol] = 'MOMENTUM_BUY'
+                long_positions.append(symbol)
+            elif current_rsi < sell_threshold and not has_position:
+                # Enter SHORT when RSI shows weakness (expect continuation down)
+                signals[symbol] = 'MOMENTUM_SHORT'
+                short_positions.append(symbol)
+            elif is_long and current_rsi < buy_tp:
+                # Exit LONG when RSI fades below take-profit level
+                signals[symbol] = 'LONG_TAKE_PROFIT'
+                # Don't add to positions - will be closed
+            elif is_short and current_rsi > sell_tp:
+                # Exit SHORT when RSI rises above take-profit level
+                signals[symbol] = 'SHORT_COVER'
+                # Don't add to positions - will be closed
+            elif has_position:
+                # Hold position - momentum still intact
+                if is_long:
+                    signals[symbol] = 'HOLD_LONG'
+                    long_positions.append(symbol)
+                elif is_short:
+                    signals[symbol] = 'HOLD_SHORT'
+                    short_positions.append(symbol)
+            else:
+                signals[symbol] = 'NEUTRAL'
+
+        except Exception as e:
+            continue
+
+    # Position sizing for independent execution mode
+    # Each symbol uses 100% of its allocated capital (not split among positions)
+    # In independent execution mode, capital is pre-allocated per symbol
+    # So weight = 1.0 means "use all of THIS symbol's allocated capital"
+
+    # Assign long positions (100% of each symbol's capital)
+    for symbol in long_positions:
+        signal = signals.get(symbol, 'HOLD')
+        is_new_entry = signal == 'MOMENTUM_BUY'
+
+        orders[symbol] = {
+            'action': 'target_weight',
+            'weight': 1.0,  # Use 100% of this symbol's allocated capital
+            'meta': {
+                'signal': signal,
+                'strategy': 'rsi_momentum',
+                'reason': f'Enter long on strong momentum (RSI > {buy_threshold})' if is_new_entry else f'Hold long position (momentum intact)',
+                'trade_type': 'ENTRY' if is_new_entry else 'HOLD'
+            }
+        }
+
+    # Assign short positions (negative weight)
+    for symbol in short_positions:
+        signal = signals.get(symbol, 'HOLD')
+        is_new_entry = signal == 'MOMENTUM_SHORT'
+
+        orders[symbol] = {
+            'action': 'target_weight',
+            'weight': -1.0,  # Use 100% of this symbol's allocated capital (short)
+            'meta': {
+                'signal': signal,
+                'strategy': 'rsi_momentum',
+                'reason': f'Enter short on weak momentum (RSI < {sell_threshold})' if is_new_entry else f'Hold short position (momentum intact)',
+                'trade_type': 'ENTRY' if is_new_entry else 'HOLD'
+            }
+        }
+
+    # Close positions when momentum fades
+    for symbol, signal in signals.items():
+        if signal in ['LONG_TAKE_PROFIT', 'SHORT_COVER']:
+            if symbol in positions and hasattr(positions[symbol], 'qty'):
+                if positions[symbol].qty != 0:
+                    is_long = positions[symbol].qty > 0
+                    reason = (f'Exit long - momentum faded (RSI < {buy_tp})' if is_long
+                             else f'Cover short - downtrend ended (RSI > {sell_tp})')
+                    orders[symbol] = {
+                        'action': 'close',
+                        'meta': {
+                            'signal': signal,
+                            'strategy': 'rsi_momentum',
+                            'reason': reason,
+                            'trade_type': 'EXIT'
+                        }
+                    }
+
+    # Store strategy state
+    context['signals'] = signals
+    context['long_positions'] = long_positions
+    context['short_positions'] = short_positions
+    context['total_positions'] = len(long_positions) + len(short_positions)
 
     return orders
 
@@ -814,7 +1030,6 @@ def macd_crossover(
                     'action': 'MACD_HOLD_SHORT',
                     'reason': f'MACD below signal (MACD: {current_macd:.4f} < Signal: {current_signal:.4f})'
                 }
-                short_positions.append(symbol)
             else:
                 signals[symbol] = {
                     'action': 'NEUTRAL',
@@ -1046,17 +1261,13 @@ def stochastic_momentum(
         except Exception as e:
             continue
 
-    # Calculate position sizing
-    total_positions = len(long_positions)
-
-    if total_positions > 0:
-        weight_per_position = 1.0 / total_positions
-
-        for symbol in long_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': weight_per_position
-            }
+    # Position sizing for independent execution mode
+    # Each symbol uses 100% of its allocated capital
+    for symbol in long_positions:
+        orders[symbol] = {
+            'action': 'target_weight',
+            'weight': 1.0  # 100% of symbol's allocated capital
+        }
 
     # Close positions on bearish crossover (explicit SELL signal)
     for symbol, signal in signals.items():
@@ -1068,7 +1279,7 @@ def stochastic_momentum(
     # Store strategy state
     context['signals'] = signals
     context['long_positions'] = long_positions
-    context['total_positions'] = total_positions
+    context['total_positions'] = len(long_positions)
 
     return orders
 
@@ -1081,12 +1292,14 @@ def bollinger_mean_reversion(
     params: Dict[str, Any]
 ) -> Dict[str, Dict]:
     """
-    Bollinger Bands Mean Reversion Strategy
+    Bollinger Bands Mean Reversion Strategy (Long-Short)
 
     Logic:
-    - BUY when price touches or crosses below lower band (oversold)
-    - SELL when price touches or crosses above upper band (overbought)
-    - Exit when price returns to middle band
+    - LONG when price touches or crosses below lower band (oversold, expecting reversion up)
+    - SHORT when price touches or crosses above upper band (overbought, expecting reversion down)
+    - Exit both longs and shorts when price returns to middle band (mean reversion complete)
+    - Exit long at upper band (take profit)
+    - Exit short at lower band (take profit)
 
     Parameters:
     -----------
@@ -1119,6 +1332,7 @@ def bollinger_mean_reversion(
     orders = {}
     signals = {}
     long_positions = []
+    short_positions = []
     positions_to_close = []  # Track explicit EXIT signals
 
     # Analyze each asset
@@ -1153,14 +1367,22 @@ def bollinger_mean_reversion(
             touches_lower = current_price <= lower_band  # Price at or below lower band
             crosses_lower = prev_price > prev_lower and current_price <= lower_band  # Strong signal
             touches_upper = current_price >= upper_band  # Price at or above upper band
+            crosses_upper = prev_price < prev_upper and current_price >= upper_band  # Strong signal
             near_middle = middle_distance < 0.01  # Within 1% of middle band
 
-            # Generate signals with detailed information
-            has_position = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty > 0
+            # Check current position
+            has_position = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty != 0
+            if has_position:
+                position_qty = positions[symbol].qty
+                is_long = position_qty > 0
+                is_short = position_qty < 0
+            else:
+                is_long = False
+                is_short = False
 
-            # Signal-based trading: Only trade on actual signals, not continuous rebalancing
+            # Signal-based trading: Long when oversold, Short when overbought
             if (touches_lower or crosses_lower) and not has_position:
-                # BUY signal - enter position (only if we don't already have one)
+                # LONG signal - enter when oversold (expecting mean reversion up)
                 signals[symbol] = {
                     'action': 'BB_LOWER_BUY',
                     'reason': f"Price ${current_price:.2f} at/below lower band ${lower_band:.2f} ({lower_distance:.2%} below)",
@@ -1171,19 +1393,20 @@ def bollinger_mean_reversion(
                     'is_cross': crosses_lower
                 }
                 long_positions.append(symbol)
-            elif touches_upper and has_position:
-                # EXIT signal - price reached upper band (take profit)
+            elif (touches_upper or crosses_upper) and not has_position:
+                # SHORT signal - enter when overbought (expecting mean reversion down)
                 signals[symbol] = {
-                    'action': 'BB_EXIT_UPPER',
-                    'reason': f"Price ${current_price:.2f} at/above upper band ${upper_band:.2f} - exit overbought",
+                    'action': 'BB_UPPER_SHORT',
+                    'reason': f"Price ${current_price:.2f} at/above upper band ${upper_band:.2f} ({upper_distance:.2%} above)",
                     'lower_band': lower_band,
                     'upper_band': upper_band,
                     'middle_band': middle_band,
-                    'price': current_price
+                    'price': current_price,
+                    'is_cross': crosses_upper
                 }
-                positions_to_close.append(symbol)  # Mark for explicit closing
+                short_positions.append(symbol)
             elif near_middle and has_position:
-                # EXIT signal - price returned to middle (mean reversion complete)
+                # EXIT signal - price returned to middle (mean reversion complete for both long and short)
                 signals[symbol] = {
                     'action': 'BB_EXIT_MIDDLE',
                     'reason': f"Price ${current_price:.2f} near middle band ${middle_band:.2f} - mean reversion complete",
@@ -1193,16 +1416,44 @@ def bollinger_mean_reversion(
                     'price': current_price
                 }
                 positions_to_close.append(symbol)  # Mark for explicit closing
+            elif touches_lower and is_short:
+                # EXIT short at lower band (take profit / stop loss)
+                signals[symbol] = {
+                    'action': 'BB_EXIT_SHORT_LOWER',
+                    'reason': f"Price ${current_price:.2f} at lower band ${lower_band:.2f} - exit short",
+                    'lower_band': lower_band,
+                    'upper_band': upper_band,
+                    'middle_band': middle_band,
+                    'price': current_price
+                }
+                positions_to_close.append(symbol)
+            elif touches_upper and is_long:
+                # EXIT long at upper band (take profit)
+                signals[symbol] = {
+                    'action': 'BB_EXIT_LONG_UPPER',
+                    'reason': f"Price ${current_price:.2f} at upper band ${upper_band:.2f} - exit long",
+                    'lower_band': lower_band,
+                    'upper_band': upper_band,
+                    'middle_band': middle_band,
+                    'price': current_price
+                }
+                positions_to_close.append(symbol)
             else:
                 # No signal - either holding or neutral
                 if has_position:
                     signals[symbol] = {
                         'action': 'BB_HOLD',
-                        'reason': f"Holding position - price ${current_price:.2f} between bands",
-                        'price': current_price
+                        'reason': f"Holding {'long' if is_long else 'short'} position - price ${current_price:.2f} between bands",
+                        'price': current_price,
+                        'lower_band': lower_band,
+                        'upper_band': upper_band,
+                        'middle_band': middle_band
                     }
-                    # NOTE: Do NOT add to long_positions here!
-                    # This prevents continuous rebalancing. Position stays as-is until exit signal.
+                    # MUST add to positions to maintain weight allocation
+                    if is_long:
+                        long_positions.append(symbol)
+                    elif is_short:
+                        short_positions.append(symbol)
                 else:
                     signals[symbol] = {
                         'action': 'NEUTRAL',
@@ -1213,27 +1464,42 @@ def bollinger_mean_reversion(
         except Exception as e:
             continue
 
-    # Calculate position sizing
-    total_positions = len(long_positions)
+    # Position sizing for independent execution mode
+    # Each symbol uses 100% of its allocated capital
 
-    if total_positions > 0:
-        weight_per_position = 1.0 / total_positions
-
-        for symbol in long_positions:
-            signal_info = signals.get(symbol, {})
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': weight_per_position,
-                'meta': {
-                    'reason': signal_info.get('reason', 'Bollinger Bands position'),
-                    'signal': signal_info.get('action', 'BB_HOLD'),
-                    'strategy': 'bollinger_mean_reversion',
-                    'lower_band': signal_info.get('lower_band'),
-                    'upper_band': signal_info.get('upper_band'),
-                    'middle_band': signal_info.get('middle_band'),
-                    'price': signal_info.get('price')
-                }
+    # Assign positive weights to long positions
+    for symbol in long_positions:
+        signal_info = signals.get(symbol, {})
+        orders[symbol] = {
+            'action': 'target_weight',
+            'weight': 1.0,  # 100% of symbol's allocated capital
+            'meta': {
+                'reason': signal_info.get('reason', 'Bollinger Bands long'),
+                'signal': signal_info.get('action', 'BB_HOLD'),
+                'strategy': 'bollinger_mean_reversion',
+                'lower_band': signal_info.get('lower_band'),
+                'upper_band': signal_info.get('upper_band'),
+                'middle_band': signal_info.get('middle_band'),
+                'price': signal_info.get('price')
             }
+        }
+
+    # Assign negative weights to short positions
+    for symbol in short_positions:
+        signal_info = signals.get(symbol, {})
+        orders[symbol] = {
+            'action': 'target_weight',
+            'weight': -1.0,  # 100% of symbol's allocated capital (short)
+            'meta': {
+                'reason': signal_info.get('reason', 'Bollinger Bands short'),
+                'signal': signal_info.get('action', 'BB_HOLD'),
+                'strategy': 'bollinger_mean_reversion',
+                'lower_band': signal_info.get('lower_band'),
+                'upper_band': signal_info.get('upper_band'),
+                'middle_band': signal_info.get('middle_band'),
+                'price': signal_info.get('price')
+            }
+        }
 
     # Close positions with explicit EXIT signals only
     for symbol in positions_to_close:
@@ -1252,6 +1518,7 @@ def bollinger_mean_reversion(
     # Store strategy state
     context['signals'] = signals
     context['long_positions'] = long_positions
+    context['short_positions'] = short_positions
     context['positions_to_close'] = positions_to_close
     context['total_positions'] = total_positions
 
@@ -1307,9 +1574,16 @@ def adx_trend_filter(
 
     orders = {}
     signals = {}
-    long_positions = []
-    short_positions = []
-    positions_to_close = []
+
+    # Calculate target weight ONCE (stored in context for consistency)
+    if 'target_weights' not in context:
+        # Calculate equal 1/N weight for each symbol
+        n_symbols = len(market_data.keys())
+        if n_symbols > 0:
+            weight_per_symbol = 1.0 / n_symbols
+            context['target_weights'] = {symbol: weight_per_symbol for symbol in market_data.keys()}
+        else:
+            context['target_weights'] = {}
 
     # Analyze each asset
     for symbol, data in market_data.items():
@@ -1336,98 +1610,88 @@ def adx_trend_filter(
             strong_trend = current_adx > adx_threshold
 
             # Check current position
-            has_long = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty > 0
-            has_short = symbol in positions and hasattr(positions[symbol], 'qty') and positions[symbol].qty < 0
+            if symbol in positions and positions[symbol] is not None:
+                current_qty = positions[symbol].qty
+            else:
+                current_qty = 0.0
 
-            # Signal-based trading: Only trade on NEW signals, not continuous rebalancing
+            is_long = current_qty > 1e-8
+            is_short = current_qty < -1e-8
+            is_flat = abs(current_qty) <= 1e-8
+
+            # Signal-based trading: ABSOLUTE signals - only trade on changes
             if strong_trend:
                 if plus_di > minus_di:
-                    # Bullish trend
-                    if not has_long:
+                    # Bullish trend signal
+                    if not is_long:
                         # Enter long position (only if we don't already have one)
                         signals[symbol] = 'ADX_LONG_ENTRY'
-                        long_positions.append(symbol)
-                        if has_short:
-                            # Close short before going long
-                            positions_to_close.append(symbol)
+                        orders[symbol] = {
+                            'action': 'target_weight',
+                            'weight': context['target_weights'].get(symbol, 0),
+                            'meta': {
+                                'signal': 'ADX_LONG_ENTRY',
+                                'strategy': 'adx_trend_filter',
+                                'adx': current_adx,
+                                'plus_di': plus_di,
+                                'minus_di': minus_di
+                            }
+                        }
                     else:
-                        # Already long - hold position, include in rebalancing
+                        # Already long - hold, no order
                         signals[symbol] = 'ADX_LONG_HOLD'
-                        long_positions.append(symbol)  # Include for multi-symbol rebalancing
+                        # NO ORDER - let position drift
                 elif minus_di > plus_di:
-                    # Bearish trend
+                    # Bearish trend signal
                     if allow_short:
-                        if not has_short:
+                        if not is_short:
                             # Enter short position (only if we don't already have one)
                             signals[symbol] = 'ADX_SHORT_ENTRY'
-                            short_positions.append(symbol)
-                            if has_long:
-                                # Close long before going short
-                                positions_to_close.append(symbol)
+                            orders[symbol] = {
+                                'action': 'target_weight',
+                                'weight': -context['target_weights'].get(symbol, 0),
+                                'meta': {
+                                    'signal': 'ADX_SHORT_ENTRY',
+                                    'strategy': 'adx_trend_filter',
+                                    'adx': current_adx,
+                                    'plus_di': plus_di,
+                                    'minus_di': minus_di
+                                }
+                            }
                         else:
-                            # Already short - hold position, include in rebalancing
+                            # Already short - hold, no order
                             signals[symbol] = 'ADX_SHORT_HOLD'
-                            short_positions.append(symbol)  # Include for multi-symbol rebalancing
+                            # NO ORDER - let position drift
                     else:
                         # Bearish but shorts not allowed - close long if we have one
                         signals[symbol] = 'ADX_BEARISH_EXIT'
-                        if has_long:
-                            positions_to_close.append(symbol)
+                        if is_long:
+                            orders[symbol] = {
+                                'action': 'close',
+                                'meta': {
+                                    'signal': 'ADX_BEARISH_EXIT',
+                                    'strategy': 'adx_trend_filter'
+                                }
+                            }
                 else:
                     signals[symbol] = 'ADX_NEUTRAL'
             else:
                 # Weak trend - exit all positions
                 signals[symbol] = 'ADX_WEAK_TREND_EXIT'
-                if has_long or has_short:
-                    positions_to_close.append(symbol)
+                if is_long or is_short:
+                    orders[symbol] = {
+                        'action': 'close',
+                        'meta': {
+                            'signal': 'ADX_WEAK_TREND_EXIT',
+                            'strategy': 'adx_trend_filter',
+                            'adx': current_adx
+                        }
+                    }
 
         except Exception as e:
             continue
 
-    # Calculate position sizing for NEW positions only
-    total_positions = len(long_positions) + len(short_positions)
-
-    if total_positions > 0:
-        weight_per_position = 1.0 / total_positions
-
-        # Long orders (only for NEW positions)
-        for symbol in long_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': weight_per_position,
-                'meta': {
-                    'signal': signals.get(symbol, 'ADX_LONG'),
-                    'strategy': 'adx_trend_filter'
-                }
-            }
-
-        # Short orders (only for NEW positions)
-        for symbol in short_positions:
-            orders[symbol] = {
-                'action': 'target_weight',
-                'weight': -weight_per_position,
-                'meta': {
-                    'signal': signals.get(symbol, 'ADX_SHORT'),
-                    'strategy': 'adx_trend_filter'
-                }
-            }
-
-    # Close positions with explicit EXIT signals only
-    for symbol in positions_to_close:
-        if symbol in positions and hasattr(positions[symbol], 'qty'):
-            if positions[symbol].qty != 0:
-                orders[symbol] = {
-                    'action': 'close',
-                    'meta': {
-                        'signal': signals.get(symbol, 'ADX_EXIT'),
-                        'strategy': 'adx_trend_filter'
-                    }
-                }
-
     # Store strategy state
     context['signals'] = signals
-    context['long_positions'] = long_positions
-    context['short_positions'] = short_positions
-    context['positions_to_close'] = positions_to_close
 
     return orders

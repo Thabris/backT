@@ -9,6 +9,8 @@ from .config import BacktestConfig, ExecutionConfig
 from .types import Position, Fill, BacktestResult, OrderDict
 from .constants import DEFAULT_COMMISSION, DEFAULT_SPREAD, SUPPORTED_FREQUENCIES
 from .logging_config import setup_logging
+from .books import Book, BookManager, create_book_from_session
+from .book_editor import BookEditor, quick_edit_symbols, quick_edit_params
 
 __all__ = [
     "BacktestConfig",
@@ -20,5 +22,11 @@ __all__ = [
     "DEFAULT_COMMISSION",
     "DEFAULT_SPREAD",
     "SUPPORTED_FREQUENCIES",
-    "setup_logging"
+    "setup_logging",
+    "Book",
+    "BookManager",
+    "create_book_from_session",
+    "BookEditor",
+    "quick_edit_symbols",
+    "quick_edit_params"
 ]

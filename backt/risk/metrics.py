@@ -247,6 +247,7 @@ class MetricsEngine(LoggerMixin):
 
             # Note: avg_drawdown_duration not returned by fast version, calculate separately
             avg_drawdown_duration = 0.0  # Simplified for now
+            max_days_to_recover = 0.0  # Not calculated in Numba fast version
 
         else:
             # Original version
@@ -259,18 +260,39 @@ class MetricsEngine(LoggerMixin):
             # Maximum drawdown
             max_drawdown = drawdown.min()
 
-            # Drawdown duration
+            # Drawdown duration and recovery time
             in_drawdown = drawdown < 0
             drawdown_periods = []
+            recovery_periods = []  # Time from trough to recovery
             current_period = 0
+            recovery_days = 0
+            in_recovery = False
+            recovery_start_equity = 0
+            recovery_target_equity = 0
 
-            for is_dd in in_drawdown:
+            for i, (is_dd, curr_equity) in enumerate(zip(in_drawdown, equity)):
                 if is_dd:
                     current_period += 1
+                    if not in_recovery:
+                        # Track the equity at trough and target for recovery
+                        recovery_start_equity = curr_equity
+                        recovery_target_equity = running_max.iloc[i]
                 else:
+                    # Exited drawdown
                     if current_period > 0:
                         drawdown_periods.append(current_period)
+                        # Start counting recovery time
+                        in_recovery = True
+                        recovery_days = current_period  # Time in drawdown
                     current_period = 0
+
+                # Track recovery time (from start of drawdown to recovery)
+                if in_recovery and curr_equity >= recovery_target_equity:
+                    recovery_periods.append(recovery_days)
+                    in_recovery = False
+                    recovery_days = 0
+                elif in_recovery:
+                    recovery_days += 1
 
             # Add final period if still in drawdown
             if current_period > 0:
@@ -279,6 +301,9 @@ class MetricsEngine(LoggerMixin):
             max_dd_duration = max(drawdown_periods) if drawdown_periods else 0
             avg_drawdown_duration = np.mean(drawdown_periods) if drawdown_periods else 0
             num_dd_periods = len(drawdown_periods)
+
+            # Maximum recovery time
+            max_days_to_recover = max(recovery_periods) if recovery_periods else 0
 
             # Calmar ratio (CAGR / Max Drawdown)
             years = len(equity) / self._get_annualization_factor(equity_curve.index)
@@ -296,6 +321,7 @@ class MetricsEngine(LoggerMixin):
             'max_drawdown': max_drawdown,
             'max_drawdown_duration': max_dd_duration if self.use_numba else max_dd_duration,
             'avg_drawdown_duration': avg_drawdown_duration,
+            'max_days_to_recover': max_days_to_recover,
             'calmar_ratio': calmar_ratio,
             'recovery_factor': recovery_factor,
             'num_drawdown_periods': num_dd_periods if self.use_numba else num_dd_periods
@@ -592,7 +618,13 @@ class MetricsEngine(LoggerMixin):
                     num_years = (end_date - start_date).days / 365.25
 
                     if num_years > 0:
-                        cagr = (1 + total_return) ** (1 / num_years) - 1
+                        # Protect against invalid power operations when losses exceed 100%
+                        # (e.g., from shorting volatility ETFs or leveraged instruments)
+                        if total_return <= -1.0:
+                            # Total loss or worse - CAGR is undefined, use large negative value
+                            cagr = -1.0
+                        else:
+                            cagr = (1 + total_return) ** (1 / num_years) - 1
                     else:
                         cagr = 0
                 else:

@@ -119,19 +119,20 @@ def quality_minus_junk(
     orders = {}
     signals = {}
 
-    # Calculate position sizing
+    # Position sizing for independent execution mode
+    # Each symbol uses 100% of its allocated capital
     total_positions = len(high_quality) + len(junk)
 
     if total_positions > 0:
         if weighting == 'equal':
-            # Equal weight - pure 1/N allocation
-            weight_per_position = 1.0 / total_positions
+            # Equal weight - each symbol uses 100% of its allocated capital
+            # In independent execution mode, capital is pre-allocated per symbol
 
             # Long high quality
             for symbol in high_quality:
                 orders[symbol] = {
                     'action': 'target_weight',
-                    'weight': weight_per_position
+                    'weight': 1.0  # 100% of symbol's allocated capital
                 }
                 signals[symbol] = f'HIGH_QUALITY (score: {quality_scores[symbol]:.3f})'
 
@@ -139,7 +140,7 @@ def quality_minus_junk(
             for symbol in junk:
                 orders[symbol] = {
                     'action': 'target_weight',
-                    'weight': -weight_per_position
+                    'weight': -1.0  # 100% of symbol's allocated capital (short)
                 }
                 signals[symbol] = f'JUNK (score: {quality_scores[symbol]:.3f})'
 

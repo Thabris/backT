@@ -7,8 +7,10 @@ Run with: streamlit run streamlit_app.py
 import sys
 from pathlib import Path
 
-# Add current directory to path to find backt module
-sys.path.insert(0, str(Path(__file__).parent))
+# Add parent directory (project root) to path to find backt module
+project_root = Path(r"C:\Users\maxim\Documents\Projects\backtester2")
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 import streamlit as st
 import pandas as pd
@@ -313,7 +315,29 @@ def main():
 
         # Capital and symbols - compact
         initial_capital = st.number_input("Capital ($)", value=100000, min_value=1000, step=10000, format="%d")
-        symbols_input = st.text_input("Symbols", value="AAPL", placeholder="AAPL, MSFT, TSLA")
+
+        # Common ETFs list
+        COMMON_ETFS = [
+            "SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "VEA", "VWO",
+            "AGG", "BND", "LQD", "HYG", "TLT", "IEF", "SHY",
+            "GLD", "SLV", "USO", "UNG",
+            "XLF", "XLE", "XLK", "XLV", "XLI", "XLP", "XLY", "XLU", "XLB",
+            "EEM", "EFA", "FXI", "EWJ", "EWZ"
+        ]
+
+        # Initialize session state for symbols if not exists
+        if 'symbols_input' not in st.session_state:
+            st.session_state.symbols_input = "AAPL"
+
+        # Button to select all ETFs
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            symbols_input = st.text_input("Symbols", value=st.session_state.symbols_input, placeholder="AAPL, MSFT, TSLA", key="symbols_text_input")
+        with col2:
+            if st.button("ETFs", help="Select all common ETFs", use_container_width=True):
+                st.session_state.symbols_input = ", ".join(COMMON_ETFS)
+                st.rerun()
+
         symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
 
         # Data source - compact
