@@ -227,27 +227,32 @@ st.markdown("""
         padding-right: 2rem !important;
     }
 
-    /* STICKY TABS AT TOP */
+    /* FIXED TABS AT TOP - Always visible */
     .stTabs {
-        position: sticky !important;
+        position: fixed !important;
         top: 0 !important;
-        z-index: 999 !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 999999 !important;
         background-color: white !important;
         padding-top: 0.5rem !important;
         padding-bottom: 0.5rem !important;
-        margin-bottom: 1rem !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        margin: 0 !important;
     }
 
-    /* Reduce overall padding and allow dropdown overflow */
+    /* Add padding to content so it doesn't hide behind fixed header */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 80px !important;
         padding-bottom: 1.2rem !important;
     }
 
-    /* Ensure main content scrolls properly */
+    /* Ensure main content area fills properly */
     .main {
         overflow-y: auto !important;
+        height: 100vh !important;
     }
 
     /* Header styling */
