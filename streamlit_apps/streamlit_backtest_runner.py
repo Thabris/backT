@@ -2811,89 +2811,160 @@ def render_parameter_optimization_cpcv():
                 })
                 st.rerun()
 
-    # Display parameter configurations
+    # Display parameter configurations - Use form to batch inputs and prevent page rerun
     param_grid = {}
     if st.session_state.param_definitions:
         st.write("")
         st.write("**Configure Parameter Ranges:**")
 
-        for idx, param_def in enumerate(st.session_state.param_definitions):
-            col1, col2, col3, col4, col5, col6 = st.columns([2, 1, 1, 1, 1, 0.5])
+        # Wrap parameter range inputs in form to prevent reruns
+        with st.form(key="param_ranges_form"):
+            param_ranges_data = []
 
-            with col1:
-                param_type = param_def.get('type', 'int')
-                default_val = param_def.get('default', 'N/A')
-                st.write(f"**{param_def['name']}**")
-                if default_val != 'N/A':
-                    st.caption(f"Default: {default_val}")
+            for idx, param_def in enumerate(st.session_state.param_definitions):
+                col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
 
-            # Determine step format based on type
-            is_float = param_type == 'float'
+                with col1:
+                    param_type = param_def.get('type', 'int')
+                    default_val = param_def.get('default', 'N/A')
+                    st.write(f"**{param_def['name']}**")
+                    if default_val != 'N/A':
+                        st.caption(f"Default: {default_val}")
 
-            if is_float:
-                # Float parameters
-                min_default = float(param_def.get('min', 0.01))
-                max_default = float(param_def.get('max', 1.0))
-                step_default = float(param_def.get('step', 0.01))
-                step_format = 0.0001  # Allow very small steps (e.g., Kalman noise parameters)
-                step_min_value = 0.00001  # Minimum allowed step value
-            else:
-                # Integer parameters
-                min_default = int(param_def.get('min', 5))
-                max_default = int(param_def.get('max', 50))
-                step_default = int(param_def.get('step', 5))
-                step_format = 1
-                step_min_value = 1
+                # Determine step format based on type
+                is_float = param_type == 'float'
 
-            with col2:
-                min_val = st.number_input(
-                    f"Min",
-                    key=f"min_{idx}",
-                    value=min_default,
-                    step=step_format,
-                    format="%.5f" if is_float else "%d"
-                )
-
-            with col3:
-                max_val = st.number_input(
-                    f"Max",
-                    key=f"max_{idx}",
-                    value=max_default,
-                    step=step_format,
-                    format="%.5f" if is_float else "%d"
-                )
-
-            with col4:
-                step_val = st.number_input(
-                    f"Step",
-                    key=f"step_{idx}",
-                    value=step_default,
-                    step=step_format,
-                    min_value=step_min_value,
-                    format="%.5f" if is_float else "%d"  # Show 5 decimals for very small steps
-                )
-
-            with col5:
-                # Show number of values
-                if step_val > 0:
-                    n_values = int((max_val - min_val) / step_val) + 1
-                    st.caption(f"({n_values} values)")
+                if is_float:
+                    # Float parameters
+                    min_default = float(param_def.get('min', 0.01))
+                    max_default = float(param_def.get('max', 1.0))
+                    step_default = float(param_def.get('step', 0.01))
+                    step_format = 0.0001
+                    step_min_value = 0.00001
                 else:
-                    st.caption("⚠️")
+                    # Integer parameters
+                    min_default = int(param_def.get('min', 5))
+                    max_default = int(param_def.get('max', 50))
+                    step_default = int(param_def.get('step', 5))
+                    step_format = 1
+                    step_min_value = 1
 
-            with col6:
-                if st.button("🗑️", key=f"del_{idx}"):
+                with col2:
+                    min_val = st.number_input(
+                        f"Min",
+                        key=f"min_{idx}",
+                        value=min_default,
+                        step=step_format,
+                        format="%.5f" if is_float else "%d"
+                    )
+
+                with col3:
+                    max_val = st.number_input(
+                        f"Max",
+                        key=f"max_{idx}",
+                        value=max_default,
+                        step=step_format,
+                        format="%.5f" if is_float else "%d"
+                    )
+
+                with col4:
+                    step_val = st.number_input(
+                        f"Step",
+                        key=f"step_{idx}",
+                        value=step_default,
+                        step=step_format,
+                        min_value=step_min_value,
+                        format="%.5f" if is_float else "%d"
+                    )
+
+                with col5:
+                    # Show number of values
+                    if step_val > 0:
+                        n_values = int((max_val - min_val) / step_val) + 1
+                        st.caption(f"({n_values} values)")
+                    else:
+                        st.caption("⚠️")
+
+                # Store data for later processing
+                param_ranges_data.append({
+                    'name': param_def['name'],
+                    'type': param_type,
+                    'min': min_val,
+                    'max': max_val,
+                    'step': step_val,
+                    'is_float': is_float
+                })
+
+            # CPCV settings also in the same form
+            st.write("")
+            st.caption("**CPCV Validation Settings**")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                top_k = st.number_input("Top K to Validate", value=3, min_value=1, max_value=10,
+                                       help="Number of best parameter sets to validate with CPCV")
+            with col2:
+                n_splits = st.number_input("CPCV Folds", value=10, min_value=3, max_value=20)
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                n_test_splits = st.number_input("Test Folds", value=2, min_value=1, max_value=5)
+            with col2:
+                purge_pct_input = st.number_input("Purge %", value=5.0, min_value=0.0, max_value=20.0)
+            with col3:
+                embargo_pct_input = st.number_input("Embargo %", value=2.0, min_value=0.0, max_value=10.0)
+
+            # Submit button for form
+            st.write("")
+            col1, col2, col3 = st.columns([2, 1, 2])
+            with col2:
+                param_form_submitted = st.form_submit_button("⚙️ Update Parameters", use_container_width=True)
+
+        # Process form data after submission
+        if param_form_submitted or 'param_grid_cache' not in st.session_state:
+            # Build parameter grid from form data
+            for param_data in param_ranges_data:
+                if param_data['is_float']:
+                    import numpy as np
+                    param_grid[param_data['name']] = list(np.arange(
+                        param_data['min'],
+                        param_data['max'] + param_data['step'],
+                        param_data['step']
+                    ))
+                else:
+                    param_grid[param_data['name']] = list(range(
+                        int(param_data['min']),
+                        int(param_data['max']) + 1,
+                        int(param_data['step'])
+                    ))
+
+            # Store in session state
+            st.session_state.param_grid_cache = param_grid
+            st.session_state.opt_top_k = top_k
+            st.session_state.opt_n_splits = n_splits
+            st.session_state.opt_n_test_splits = n_test_splits
+            st.session_state.opt_purge_pct = purge_pct_input / 100
+            st.session_state.opt_embargo_pct = embargo_pct_input / 100
+        else:
+            # Use cached values
+            param_grid = st.session_state.param_grid_cache
+            top_k = st.session_state.opt_top_k
+            n_splits = st.session_state.opt_n_splits
+            n_test_splits = st.session_state.opt_n_test_splits
+            purge_pct = st.session_state.opt_purge_pct
+            embargo_pct = st.session_state.opt_embargo_pct
+
+        # Delete buttons (outside form to allow immediate rerun)
+        st.write("")
+        st.write("**Manage Parameters:**")
+        delete_cols = st.columns(len(st.session_state.param_definitions))
+        for idx, param_def in enumerate(st.session_state.param_definitions):
+            with delete_cols[idx]:
+                if st.button(f"🗑️ {param_def['name']}", key=f"del_{idx}"):
                     st.session_state.param_definitions.pop(idx)
+                    if 'param_grid_cache' in st.session_state:
+                        del st.session_state.param_grid_cache
                     st.rerun()
-
-            # Build parameter grid
-            if is_float:
-                # For float parameters, create list with proper precision
-                import numpy as np
-                param_grid[param_def['name']] = list(np.arange(min_val, max_val + step_val, step_val))
-            else:
-                # For int parameters, use range
-                param_grid[param_def['name']] = list(range(int(min_val), int(max_val) + 1, int(step_val)))
 
         # Show parameter space size
         if param_grid:
@@ -2908,25 +2979,7 @@ def render_parameter_optimization_cpcv():
                 est_evals = min(total_combinations, 100)
                 st.info(f"🧠 **~{est_evals} combinations** will be intelligently sampled from {total_combinations} possible (FLAML)")
 
-    st.write("")
-    st.caption("**Step 3: CPCV Validation Settings**")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        top_k = st.number_input("Top K to Validate", value=3, min_value=1, max_value=10,
-                               help="Number of best parameter sets to validate with CPCV")
-    with col2:
-        n_splits = st.number_input("CPCV Folds", value=10, min_value=3, max_value=20)
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        n_test_splits = st.number_input("Test Folds", value=2, min_value=1, max_value=5)
-    with col2:
-        purge_pct = st.number_input("Purge %", value=5.0, min_value=0.0, max_value=20.0) / 100
-    with col3:
-        embargo_pct = st.number_input("Embargo %", value=2.0, min_value=0.0, max_value=10.0) / 100
-
-    # Run Button
+    # Run Button (separate from form)
     st.write("")
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
