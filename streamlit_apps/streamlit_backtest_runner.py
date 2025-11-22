@@ -193,7 +193,7 @@ st.set_page_config(
     page_title="BackT Backtest Runner",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"  # Hide sidebar by default
 )
 
 
@@ -209,6 +209,39 @@ st.markdown("""
         --bg-light: #f8f9fa;
         --bg-dark: #2c3e50;
         --text-muted: #6c757d;
+    }
+
+    /* HIDE SIDEBAR COMPLETELY */
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+
+    /* Hide sidebar collapse button */
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
+
+    /* Expand main content to full width (no sidebar) */
+    .main .block-container {
+        max-width: 100% !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+
+    /* STICKY TABS AT TOP */
+    .stTabs {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 999 !important;
+        background-color: white !important;
+        padding-top: 1rem !important;
+        padding-bottom: 0.5rem !important;
+        margin-top: -2rem !important;
+        margin-left: -2rem !important;
+        margin-right: -2rem !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
     }
 
     /* Reduce overall padding and allow dropdown overflow */
@@ -378,15 +411,15 @@ st.markdown("""
         color: #495057 !important;
     }
 
-    /* Sidebar styling */
-    [data-testid="stSidebar"] {
+    /* Sidebar styling - HIDDEN (kept for reference if ever needed) */
+    /* [data-testid="stSidebar"] {
         background-color: #f8f9fa;
     }
 
     [data-testid="stSidebar"] h2 {
         font-size: 1.15rem !important;
         color: #2c3e50 !important;
-    }
+    } */
 
     /* Caption text - smaller */
     .stCaption {
@@ -3430,7 +3463,9 @@ def main():
     with tab5:
         render_book_manager_sheet()
 
-    # Sidebar - Status - compact
+    # Sidebar - DISABLED (hidden via CSS)
+    # Uncomment if you want to re-enable the sidebar
+    """
     with st.sidebar:
         # Logo/Header - compact
         st.markdown(
@@ -3527,6 +3562,7 @@ def main():
             st.cache_data.clear()
             st.success("Cache cleared! App performance should improve.")
             st.rerun()
+    """
 
 
 if __name__ == "__main__":
