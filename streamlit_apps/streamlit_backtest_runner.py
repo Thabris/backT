@@ -244,19 +244,9 @@ st.markdown("""
     }
 
     /* Add padding to content so it doesn't hide behind fixed header */
-    .block-container {
-        padding-top: 80px !important;
-        padding-bottom: 1.2rem !important;
-    }
-
-    /* Ensure scrollbar is visible */
-    section.main {
-        overflow-y: scroll !important;
-    }
-
-    /* Make sure the main content area shows scrollbar */
     .main .block-container {
-        overflow: visible !important;
+        padding-top: 80px !important;
+        padding-bottom: 2rem !important;
     }
 
     /* Header styling */
