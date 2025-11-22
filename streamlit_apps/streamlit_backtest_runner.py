@@ -3183,9 +3183,6 @@ def main():
     pg = st.navigation(pages, position="top")
     pg.run()
 
-    # Sidebar - DISABLED (hidden via CSS)
-    # Uncomment if you want to re-enable the sidebar
-    """
     with st.sidebar:
         # Logo/Header - compact
         st.markdown(
