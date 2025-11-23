@@ -20,16 +20,22 @@ if str(project_root) not in sys.path:
 
 import warnings
 import logging
+import os
+
+# Suppress Streamlit warnings at environment level (before import)
+os.environ['STREAMLIT_SERVER_HEADLESS'] = 'true'
 
 # Suppress Streamlit worker warnings
 warnings.filterwarnings('ignore', message='.*missing ScriptRunContext.*')
 warnings.filterwarnings('ignore', message='.*No runtime found.*')
 warnings.filterwarnings('ignore', message='.*to view a Streamlit app.*')
+warnings.filterwarnings('ignore', category=UserWarning, module='streamlit')
 
-# Suppress Streamlit logging warnings
-logging.getLogger('streamlit.runtime.scriptrunner_utils.script_run_context').setLevel(logging.ERROR)
-logging.getLogger('streamlit.runtime.caching.cache_data_api').setLevel(logging.ERROR)
-logging.getLogger('streamlit').setLevel(logging.ERROR)
+# Suppress Streamlit logging warnings - set to CRITICAL to suppress all
+logging.getLogger('streamlit.runtime.scriptrunner_utils.script_run_context').setLevel(logging.CRITICAL)
+logging.getLogger('streamlit.runtime.caching.cache_data_api').setLevel(logging.CRITICAL)
+logging.getLogger('streamlit.runtime.state').setLevel(logging.CRITICAL)
+logging.getLogger('streamlit').setLevel(logging.CRITICAL)
 
 import streamlit as st
 import pandas as pd
