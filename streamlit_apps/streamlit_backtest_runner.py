@@ -188,9 +188,10 @@ ETF_PRESETS = {
 
 
 # Page configuration
+tray_icon_path = project_root / "visuals" / "tray_icon.png"
 st.set_page_config(
     page_title="BackT Backtest Runner",
-    page_icon="📊",
+    page_icon=str(tray_icon_path) if tray_icon_path.exists() else "📊",
     layout="wide",
     initial_sidebar_state="collapsed"  # Hide sidebar by default
 )
