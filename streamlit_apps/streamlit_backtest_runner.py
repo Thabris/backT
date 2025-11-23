@@ -3170,6 +3170,11 @@ def render_book_manager_sheet():
 def main():
     """Main application"""
 
+    # Display banner at the top
+    banner_path = Path(__file__).parent.parent / "visuals" / "banner.png"
+    if banner_path.exists():
+        st.image(str(banner_path), use_column_width=True)
+
     # Define pages using Streamlit's native navigation (top position)
     pages = [
         st.Page(render_configuration_sheet, title="⚙️ Configuration"),
