@@ -2887,7 +2887,9 @@ def render_parameter_optimization_cpcv():
                 # FLAML returns list of ParameterSetResult - convert to DataFrame
                 top_df = result.to_dataframe().head(top_k).copy()
             param_cols = [col for col in top_df.columns if col.startswith('param_')]
+            # Create unique metric columns list (remove duplicates)
             metric_cols = [optimization_metric, 'total_return', 'max_drawdown', 'sharpe_ratio']
+            metric_cols = list(dict.fromkeys(metric_cols))  # Remove duplicates while preserving order
             metric_cols = [col for col in metric_cols if col in top_df.columns]
             display_cols = param_cols + metric_cols
 
